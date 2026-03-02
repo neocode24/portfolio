@@ -48,6 +48,8 @@ spec:
               value: "1"
             - name: GITSYNC_ROOT
               value: /git
+            - name: GITSYNC_LINK
+              value: current
           volumeMounts:
             - name: site-content
               mountPath: /git
