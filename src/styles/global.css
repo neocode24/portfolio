@@ -80,13 +80,8 @@ html.dark {
   position: relative;
   padding: 1rem;
   border-radius: 0.5rem;
-  border: 1px solid var(--color-border);
   overflow-x: auto;
   counter-reset: line;
-}
-
-.dark .prose pre {
-  border-color: var(--color-dark-border);
 }
 
 .prose pre code {
