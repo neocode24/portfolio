@@ -1,64 +1,92 @@
 ---
 title: "모노레포 CI/CD 실전 구성 — PR Preview부터 자동 정리까지"
-description: "Next.js + NestJS 모노레포에서 GitHub Actions, ArgoCD, AKS로 구축한 CI/CD 파이프라인. PR별 격리된 Preview 환경, 변경 감지 기반 선택적 빌드, 자동 cleanup까지의 여정을 다룹니다."
+description: "Next.js + NestJS 모노레포에서 GitHub Actions, ArgoCD, AKS로 구축한 CI/CD 파이프라인. PR별 격리 Preview 환경, 변경 감지 기반 선택적 빌드, GitOps 배포, 자동 cleanup을 다룹니다."
 pubDate: 2026-03-02
 tags: ["devops", "cicd", "kubernetes", "gitops", "github-actions"]
 vaultSource: "2026.02/AI Portal CI-CD Pipeline 구조.md"
 ---
 
-"배포 좀 해주세요."
+코드 리뷰를 하는데 "로컬에서 띄워봐야 알 것 같아요"라는 코멘트가 달린다. 리뷰어가 `git checkout`, `npm install`, `docker compose up`을 거쳐 직접 실행해야 동작을 확인할 수 있다. 프론트엔드와 API가 모노레포에 같이 있으면 환경 설정은 더 번거로워진다.
 
-팀에서 이 말이 나오기 시작하면 CI/CD 파이프라인을 만들 때다. 개발자가 코드를 작성하고, 그 코드가 프로덕션에 닿기까지의 모든 과정을 자동화하는 것. 말은 쉽지만 모노레포에서는 생각보다 까다롭다.
+PR을 올리면 격리된 Preview 환경이 자동으로 뜨고, 리뷰어가 URL 하나로 동작을 확인하고, PR이 닫히면 환경이 자동으로 사라지는 파이프라인. 이 글은 Next.js + NestJS 모노레포 프로젝트에서 GitHub Actions, ArgoCD, AKS를 조합해 이 구조를 만든 경험이다.
 
-이 글은 Next.js 프론트엔드와 NestJS API가 하나의 레포에 공존하는 모노레포 프로젝트에서, GitHub Actions + ArgoCD + AKS로 CI/CD 파이프라인을 구축한 실전 경험이다. PR을 올리면 격리된 Preview 환경이 자동으로 생성되고, PR을 닫으면 DB 스키마까지 포함해서 깨끗하게 정리되는 구조다.
+## 세 개의 워크플로우
 
-## PR 하나의 생명주기
-
-이 파이프라인이 하는 일을 한 문장으로 요약하면, **PR의 생명주기에 맞춰 환경을 만들고 지우는 것**이다.
+파이프라인의 뼈대는 단순하다. Git에서 일어나는 이벤트 세 가지에, GitHub Actions 워크플로우 세 개가 1:1로 대응한다.
 
 ```mermaid
-flowchart LR
-    A["PR 생성"] --> B["CI 실행<br/>Lint · Test · Build"]
-    B --> C["Preview 환경<br/>자동 배포"]
-    C --> D["코드 리뷰<br/>+ 동작 확인"]
-    D --> E["main 머지"]
-    E --> F["Sandbox<br/>자동 배포"]
+flowchart TD
+    subgraph "GitHub Actions"
+        PR["PR 생성/업데이트"]
+        PUSH["main push"]
+        CLOSE["PR close"]
 
-    G["PR close"] --> H["Preview 환경<br/>자동 정리"]
+        PR --> CI["ci.yml"]
+        PUSH --> DEPLOY["deploy-sandbox.yml"]
+        CLOSE --> CLEANUP["cleanup-preview.yml"]
+    end
 
-    style C fill:#e1f5fe
-    style H fill:#ffebee
+    subgraph "CI Pipeline"
+        CI --> DETECT["Phase 0: 변경 감지"]
+        DETECT --> LINT["Phase 1: Lint & Type Check"]
+        LINT --> TEST["Phase 2: Test"]
+        TEST --> BUILD_PR["Phase 3: Build & Push"]
+        BUILD_PR --> PREVIEW["Phase 4: Preview 배포"]
+    end
+
+    subgraph "Deploy Pipeline"
+        DEPLOY --> PREPARE["Prepare"]
+        PREPARE --> BUILD_WEB["Build Web"]
+        PREPARE --> BUILD_API["Build API"]
+        BUILD_WEB --> DEPLOY_ARGO["ArgoCD Deploy"]
+        BUILD_API --> DEPLOY_ARGO
+    end
+
+    subgraph "Infrastructure"
+        ACR["Azure ACR"]
+        ARGO["ArgoCD"]
+        AKS["AKS Cluster"]
+    end
+
+    BUILD_PR --> ACR
+    BUILD_WEB --> ACR
+    BUILD_API --> ACR
+    DEPLOY_ARGO --> ARGO
+    PREVIEW --> ARGO
+    ARGO --> AKS
 ```
 
-Git 이벤트 세 가지에 워크플로우 세 개가 1:1로 대응한다.
+| 워크플로우 | 트리거 | 하는 일 |
+|-----------|--------|---------|
+| `ci.yml` | PR 생성/업데이트 | 변경 감지 → 린트 → 테스트 → 빌드 → Preview 배포 |
+| `deploy-sandbox.yml` | main push | Web/API 병렬 빌드 → Sandbox 배포 |
+| `cleanup-preview.yml` | PR close | Preview 환경 완전 정리 |
 
-| Git 이벤트 | 워크플로우 | 결과 |
-|------------|-----------|------|
-| PR 생성/업데이트 | `ci.yml` | 테스트 → 빌드 → Preview 배포 |
-| main push | `deploy-sandbox.yml` | Sandbox 환경 자동 배포 |
-| PR close | `cleanup-preview.yml` | Preview 환경 완전 정리 |
+**PR이 열리면 환경이 생기고, 머지되면 Sandbox에 반영되고, 닫히면 정리된다.** 이 흐름 안에서 사람이 하는 일은 코드 작성과 리뷰 승인뿐이다.
 
-원칙은 단순하다. PR이 열리면 환경이 생기고, 닫히면 사라진다.
+## CI Pipeline: 변경된 것만 빌드한다
 
-## 모노레포의 첫 번째 문제: 뭘 빌드해야 하는가
+모노레포에서 가장 흔한 실수는 API 한 줄 고쳤는데 프론트엔드까지 빌드하는 것이다. CI 비용과 시간이 불필요하게 늘어난다.
 
-API 컨트롤러 한 줄을 고쳤는데 Next.js 빌드가 돌아간다. 모노레포에서 가장 먼저 부딪히는 문제다.
+### Phase 0 — 변경 감지
 
-해결책은 **두 겹의 필터링**이다.
+CI의 첫 단계는 "뭐가 바뀌었는지" 파악하는 것이다. `dorny/paths-filter` 액션이 변경된 파일 경로를 분석해서 영역별 플래그를 설정한다.
 
-첫 번째 겹은 `dorny/paths-filter`다. CI 파이프라인의 맨 앞에서 어떤 디렉토리가 바뀌었는지 감지한다.
+| 영역 | 감지 경로 |
+|------|-----------|
+| web | `apps/web/**`, `libs/**`, `package.json`, `pnpm-lock.yaml` |
+| api | `apps/api/**`, `libs/**`, `package.json`, `pnpm-lock.yaml` |
+| libs | `libs/**` |
 
-```yaml
-# 변경 영역 감지
-web: apps/web/**, libs/**, package.json
-api: apps/api/**, libs/**, package.json
-```
+Web만 바뀌었으면 API 관련 단계를 전부 건너뛴다. 공유 라이브러리(`libs/`)가 바뀌면 양쪽 모두 빌드한다. 이 감지가 없으면 모든 PR에서 모든 앱의 전체 파이프라인이 돌아간다.
 
-Web만 바뀌면 API 빌드를 건너뛴다. 공유 라이브러리(`libs/`)가 바뀌면 양쪽 다 빌드한다. 여기서 이미 불필요한 빌드의 상당 부분이 걸러진다.
+### Phase 1~2 — Lint, Test
 
-두 번째 겹은 Nx의 `affected` 명령이다. `pnpm nx affected -t test`는 모노레포의 의존성 그래프를 분석해서, 실제로 변경에 영향받는 프로젝트만 테스트를 실행한다. `libs/` 안에도 여러 패키지가 있는데, 의존 관계가 없는 패키지까지 테스트하지 않는다.
+Nx의 `affected` 명령이 두 번째 필터 역할을 한다. `pnpm nx affected -t test`는 모노레포의 의존성 그래프를 분석해서, 실제로 영향받는 프로젝트만 테스트한다. `libs/` 안에 패키지가 여러 개 있어도 의존 관계가 없는 패키지는 테스트하지 않는다.
 
-여기에 하나 더. 같은 PR에 커밋을 연속으로 push하면 이전 CI가 자동 취소된다.
+테스트는 매트릭스 전략으로 병렬 실행한다. API 테스트와 라이브러리 테스트가 동시에 돌아간다. Web 프론트엔드 단위테스트는 E2E로 대체했다.
+
+여기에 동시성 제어가 더해진다.
 
 ```yaml
 concurrency:
@@ -66,145 +94,129 @@ concurrency:
   cancel-in-progress: true
 ```
 
-세 줄이지만 효과가 크다. "아, 오타 수정" 커밋을 push할 때마다 이전 빌드가 끝날 때까지 기다리지 않아도 된다.
+같은 PR에 커밋을 연속으로 push하면 이전 CI 실행이 자동으로 취소된다. "오타 수정" 커밋을 push할 때 이전 빌드가 완료될 때까지 기다릴 필요가 없다.
 
-## Preview 환경: 세 가지 차원의 격리
+### Phase 3 — Build & Push
 
-이 파이프라인에서 가장 공들인 부분이다.
+Web(Next.js)과 API(NestJS)를 각각 Docker 이미지로 빌드하고 Azure ACR에 push한다.
 
-PR마다 완전히 격리된 Preview 환경을 자동으로 만든다. "완전히 격리"라는 말이 핵심인데, 세 가지 차원에서 분리한다.
+이미지 태그는 환경별로 다르게 관리한다.
 
-**첫째, Kubernetes 네임스페이스.**
+| 환경 | 태그 패턴 | 예시 |
+|------|-----------|------|
+| PR Preview | `pr-{PR번호}-{short SHA}` | `pr-42-a1b2c3d` |
+| Sandbox | `{YYYYMMDD-HHMMSS}-{short SHA}` + `latest` | `20260302-143000-a1b2c3d` |
 
-PR #42가 올라오면 `pr-42` 네임스페이스가 생성된다. Web Deployment, API Deployment, Service, Ingress가 이 안에 배치된다. PR #43의 리소스와 물리적으로 분리된다.
+PR 태그에는 `latest`를 붙이지 않는다. Preview 환경은 특정 커밋의 결과를 확인하는 곳이니까, 태그가 고정되어야 한다.
 
-**둘째, 데이터베이스.**
+## Preview 환경: PR별 완전한 격리
 
-여기서 가장 고민했다. 선택지가 두 가지였다.
+이 파이프라인에서 가장 공들인 부분이다. PR마다 독립된 환경이 자동으로 생성된다.
 
-- PR마다 PostgreSQL 인스턴스를 새로 띄우기 — 완벽한 격리지만 리소스 낭비가 심하다
-- 하나의 인스턴스에서 스키마로 격리하기 — 가벼우면서 충분한 격리
+격리는 세 가지 차원으로 이루어진다.
 
-PostgreSQL의 스키마 격리를 선택했다. PR #42는 `pr_42` 스키마를 사용한다. Migration Job이 ArgoCD PreSync Hook으로 실행되면서 테이블을 초기화한다. 인스턴스 하나로 수십 개 PR의 데이터를 격리할 수 있다.
+**Kubernetes 네임스페이스** — PR #42가 올라오면 `pr-42` 네임스페이스가 생성된다. Web Deployment, API Deployment, Service, Ingress 전부 이 안에 들어간다. PR #43의 리소스와 섞이지 않는다.
 
-**셋째, 네트워크 진입점.**
+**데이터베이스 스키마** — PR마다 PostgreSQL 인스턴스를 따로 띄우면 리소스 낭비가 심하다. 대신 하나의 인스턴스를 공유하되, PR마다 별도 스키마(`pr_42`)를 생성한다. ArgoCD PreSync Hook으로 Migration Job이 실행되면서 테이블을 초기화한다. 인스턴스 하나로 수십 개 PR의 데이터를 격리할 수 있다.
 
-Ingress에 `pr-42.{도메인}` 호스트를 설정한다. nip.io를 활용하면 별도 DNS 설정 없이 IP 기반으로 바로 접근 가능하다.
+**Ingress 호스트** — `pr-42.{도메인}` 형태로 접근한다. nip.io를 활용하면 DNS 레코드 없이 IP 기반으로 바로 접근 가능하다.
 
-이 세 가지 격리를 **Kustomize overlay** 하나로 관리한다.
+이 세 가지를 Kustomize overlay로 관리한다. base 매니페스트는 공통으로 쓰고, PR별 변수(네임스페이스, DB 스키마, Ingress 호스트)만 patch로 오버라이드한다. Git Tag 기반으로 ArgoCD가 특정 리비전을 참조한다.
 
 ```
 manifests/
 ├── apps/
-│   ├── base/               # 공통 Deployment, Service
-│   │   ├── api/
-│   │   ├── web/
+│   ├── base/                 # 공통 리소스
+│   │   ├── api/              # API Deployment, Service, Migration Job
+│   │   ├── web/              # Web Deployment, Service
 │   │   ├── ingress.yaml
-│   │   └── sealed-secret.yaml
+│   │   ├── sealed-secret.yaml
+│   │   └── serviceaccount.yaml
 │   └── kustomization.yaml
 └── overlays/
-    └── pr/                  # PR별 오버라이드
-        ├── cleanup-job.yaml # DB schema DROP Hook
+    └── pr/                   # PR Preview 오버라이드
+        ├── cleanup-job.yaml  # PreDelete Hook (DB schema DROP)
         └── kustomization.yaml
 ```
 
-base는 공통이고, PR 번호·스키마·호스트만 patch로 주입한다. PR이 10개 열려도 매니페스트를 10벌 작성할 필요가 없다.
+## 빌드 전략: Alpine과 Debian을 가르는 것
 
-## 빌드: 같은 모노레포, 다른 전략
-
-같은 레포의 두 앱인데, 빌드 방식이 다르다.
+같은 모노레포의 두 앱인데 Docker 빌드 전략이 다르다. 이유가 있다.
 
 ### Web — Next.js Standalone
 
 ```mermaid
 flowchart LR
-    A["pnpm nx build web"] --> B["standalone 번들"] --> C["Docker 이미지<br/>node:20-alpine"]
+    A["pnpm nx build web"] --> B["standalone 결과물 추출"] --> C["Docker context 구성"] --> D["이미지 빌드"]
 ```
 
-Next.js의 standalone 모드는 서버 코드와 필요한 node_modules를 하나의 디렉토리로 묶어준다. Nx 모노레포에서는 `outputFileTracingRoot`를 레포 루트로 설정해야 의존성을 제대로 추적한다. 이 설정 하나를 빠뜨리면 빌드는 되는데 런타임에 모듈을 못 찾는 함정이 있다.
+Next.js의 standalone 모드는 서버 코드와 필요한 node_modules를 하나의 디렉토리로 번들링한다. 모노레포에서는 `outputFileTracingRoot`를 레포 루트로 설정해야 한다. 이걸 빠뜨리면 빌드는 성공하는데 런타임에 모듈을 찾지 못하는 함정이 있다. 루트와 앱의 node_modules를 Docker 내에서 병합하는 과정도 필요하다.
 
-Base image는 `node:20-alpine`. 순수 JavaScript 실행이라 경량 이미지로 충분하다.
+Base image는 `node:20-alpine`. 순수 JavaScript만 실행하므로 경량 이미지로 충분하다.
 
 ### API — NestJS + pnpm deploy
 
 ```mermaid
 flowchart LR
-    A["pnpm nx build api"] --> B["pnpm deploy --prod"] --> C["config · migration<br/>파일 복사"] --> D["Docker 이미지<br/>node:20-slim"]
+    A["pnpm nx build api"] --> B["pnpm deploy --prod"] --> C["config/data 파일 복사"] --> D["migration 파일 복사"] --> E["이미지 빌드"]
 ```
 
-API는 `pnpm deploy --filter=api --prod`로 프로덕션 의존성만 추출한다. 그런데 하나 문제가 있었다. PDF 처리 기능에서 canvas 네이티브 모듈이 필요한데, canvas는 glibc를 요구한다. Alpine은 musl libc라서 호환되지 않는다.
+API는 `pnpm deploy --filter=api --prod --legacy`로 프로덕션 의존성만 깔끔하게 추출한다. 빌드 결과물에 포함되지 않는 설정 파일과 DB migration 파일은 별도로 Docker context에 복사한다.
 
-결국 API의 base image를 `node:20-slim`(Debian 기반)으로 바꿨다. 이미지 크기는 alpine 대비 3배 가까이 커졌지만, 네이티브 모듈 호환성은 타협할 수 없었다. DB migration 파일과 LLM 관련 config 파일은 빌드 결과물에 포함되지 않으므로 별도로 Docker context에 복사한다.
+문제는 PDF 처리 기능이었다. canvas 네이티브 모듈이 glibc를 요구하는데, Alpine은 musl libc라 호환이 안 된다. API의 base image를 `node:20-slim`(Debian 기반)으로 바꿨다. 이미지 크기는 커졌지만 네이티브 모듈 호환성은 타협할 수 없다.
 
-### 이미지 태그 전략
+DB migration은 Pod 안에서 실행하지 않는다. Kubernetes PreSync Job으로 배포 직전에 실행된다. 앱 시작과 스키마 변경이 분리되어 있어서 롤백이 깔끔하다.
 
-| 환경 | 태그 패턴 | 이유 |
-|------|-----------|------|
-| PR Preview | `pr-42-a1b2c3d` | 특정 커밋에 고정 |
-| Sandbox | `20260302-143000-a1b2c3d` + `latest` | 시간 기반 정렬 + 최신 참조 |
+## GitOps 배포: ArgoCD + Kustomize
 
-PR 태그에 `latest`를 붙이지 않는 이유가 있다. Preview 환경은 리뷰어가 "이 커밋의 결과"를 확인하는 곳이다. 새 커밋이 push되면 새 태그가 생기고, ArgoCD가 이 태그로 sync한다.
-
-## GitOps 배포: CI와 CD의 경계
-
-GitHub Actions와 ArgoCD의 역할 분담이 깔끔하다.
+GitHub Actions와 ArgoCD의 역할이 명확하게 나뉜다.
 
 ```mermaid
 flowchart LR
-    A["GitHub Actions"] -->|"이미지 빌드 + Push"| B["Azure ACR"]
-    A -->|"argocd app set<br/>--kustomize-image"| C["ArgoCD"]
+    A["GitHub Actions"] -->|"이미지 빌드 + ACR Push"| B["Azure ACR"]
+    A -->|"argocd app set --kustomize-image"| C["ArgoCD"]
     C -->|"Sync"| D["AKS Cluster"]
 ```
 
-GitHub Actions는 이미지를 빌드해서 ACR에 올리고, ArgoCD에 "이 이미지 태그로 배포해"라고 알려준다. 여기까지가 CI의 끝이다. 실제 Kubernetes 리소스를 만들고, 롤백하고, health check를 하는 건 ArgoCD의 몫이다.
+GitHub Actions는 이미지를 빌드해서 ACR에 올린다. 그리고 `argocd app set --kustomize-image` 명령으로 ArgoCD Application의 이미지 태그만 변경한다. ArgoCD가 diff를 감지하고 자동으로 sync한다. 매니페스트 YAML 파일을 직접 수정하지 않는다.
 
-핵심 명령은 `argocd app set --kustomize-image`다. 매니페스트 YAML을 직접 수정하는 게 아니라, ArgoCD Application의 이미지 오버라이드만 변경한다. ArgoCD가 diff를 감지하고 자동으로 sync한다.
+main push 시 Sandbox 배포도 같은 방식이다. Web과 API를 병렬로 빌드하고, ArgoCD에 이미지 태그를 넘기고, sync가 완료될 때까지 기다린다. Ingress host는 별도 patch를 적용한 후 재동기화한다.
 
-시크릿은 **SealedSecrets**로 관리한다. 공개키로 암호화한 시크릿 파일을 Git에 커밋한다. 클러스터의 SealedSecret 컨트롤러만이 복호화할 수 있다. cluster-wide scope로 설정해서 PR별 네임스페이스에서도 동일한 시크릿을 사용할 수 있다.
+시크릿은 SealedSecrets로 관리한다. 공개키로 암호화한 시크릿을 Git에 커밋하고, 클러스터의 SealedSecret 컨트롤러가 복호화한다. cluster-wide scope로 설정해서 PR별 네임스페이스에서도 같은 시크릿을 사용할 수 있다. 시크릿이 Git에 들어가니까 GitOps 원칙을 깨지 않는다.
 
-## Cleanup: 만드는 것보다 중요한 것
+## Cleanup: 만드는 것보다 어려운 것
 
-Preview 환경을 만드는 건 재미있다. 하지만 정리하지 않으면 클러스터가 PR의 잔해로 뒤덮인다. 오래된 네임스페이스, 방치된 DB 스키마, 쌓이는 컨테이너 이미지.
+Preview 환경을 만들기만 하고 정리하지 않으면 클러스터가 PR의 잔해로 뒤덮인다. 방치된 네임스페이스, 쌓이는 DB 스키마, 불어나는 컨테이너 이미지.
 
 PR이 닫히면 `cleanup-preview.yml`이 다섯 가지를 순서대로 정리한다.
 
-```
-1. Git Tags 삭제          ← ArgoCD 리비전 참조 먼저 제거
-2. ArgoCD Application 삭제 ← cascade로 하위 리소스 정리
-3. K8s Namespace 삭제      ← 안의 모든 리소스가 함께 사라짐
-4. DB Schema DROP          ← PreDelete Hook Job이 실행
-5. 컨테이너 이미지          ← ACR retention policy가 자동 처리
-```
+1. **Git Tags** — `pr-{번호}-*` 패턴의 태그를 삭제한다. ArgoCD가 이 태그로 리비전을 참조하므로 먼저 정리해야 한다.
+2. **ArgoCD Application** — cascade 옵션으로 삭제하면 Application이 관리하던 Deployment, Service, Pod가 연쇄적으로 정리된다.
+3. **Kubernetes Namespace** — 네임스페이스를 삭제하면 안의 모든 리소스가 함께 사라진다.
+4. **DB Schema** — PreDelete Hook Job이 `DROP SCHEMA CASCADE`를 실행한다. Application이 삭제되기 직전에 동작하므로 데이터가 남지 않는다.
+5. **컨테이너 이미지** — ACR의 retention policy가 일정 기간 후 자동 정리한다. 별도 처리가 불필요하다.
 
-순서가 중요하다. ArgoCD Application을 먼저 지우면 Git Tag가 고아가 된다. Tag를 먼저 지우고, Application을 cascade 삭제하면 Deployment → Pod → Service까지 연쇄적으로 정리된다.
+PR이 오래 열려 있다가 닫혀도, 며칠 전 머지된 PR이 닫혀도 동일한 정리 프로세스가 동작한다.
 
-DB 스키마 정리는 Kubernetes의 PreDelete Hook을 활용한다. Application이 삭제되기 직전에 Job이 실행되면서 `DROP SCHEMA pr_42 CASCADE`를 수행한다. 데이터가 남지 않는다.
+## 설계 결정 요약
 
-ACR의 컨테이너 이미지는 retention policy에 맡긴다. 일정 기간이 지나면 자동 삭제된다. 이건 수동으로 할 필요가 없다.
-
-## Sandbox 배포: main의 흐름
-
-PR이 머지되면 `deploy-sandbox.yml`이 동작한다. Preview보다 단순하다.
-
-```mermaid
-flowchart LR
-    A["태그 생성"] --> B["Web 빌드<br/>API 빌드"]
-    B --> C["ArgoCD<br/>이미지 오버라이드"]
-    C --> D["Sync & Wait"]
-```
-
-Web과 API를 병렬로 빌드한다. 독립적인 앱이니까 순서가 없다. 빌드가 끝나면 ArgoCD에 새 이미지 태그를 넘기고, sync가 완료될 때까지 기다린다.
-
-Preview와 다른 점은 네임스페이스와 DB 스키마가 고정이라는 것이다. Sandbox는 "최신 main 코드가 항상 돌아가는 환경"이므로 매번 새로 만들 필요가 없다.
+| 결정 | 선택 | 이유 |
+|------|------|------|
+| 변경 감지 | `dorny/paths-filter` + Nx affected | 2단 필터링으로 불필요한 빌드 방지 |
+| PR 동시성 | `concurrency` + `cancel-in-progress` | 연속 push 시 이전 CI 자동 취소 |
+| Preview DB | PostgreSQL schema isolation | DB 인스턴스 공유하면서 PR별 격리 |
+| 시크릿 | SealedSecrets (cluster-wide) | Git에 암호화 저장, GitOps 원칙 유지 |
+| 이미지 레지스트리 | Azure ACR | AKS와 같은 리전, 네트워크 비용 없음 |
+| 배포 | ArgoCD + Kustomize | overlay 기반 환경별 설정, 자동 sync |
+| Web base image | `node:20-alpine` | JavaScript만 실행, 경량 |
+| API base image | `node:20-slim` | canvas(glibc) 의존성, Debian 필수 |
 
 ## 돌아보며
 
-이 파이프라인이 완벽한 건 아니다.
+이 파이프라인이 완벽하지는 않다.
 
-Smoke Test가 아직 빈 칸이다. Preview 환경이 뜨는 것까지는 확인하지만, 로그인이 되는지, API가 응답하는지 자동으로 검증하지 못한다. Playwright E2E를 붙이려고 계획만 세워둔 상태다.
+Smoke Test는 아직 placeholder다. Preview 환경이 뜨는 것까지는 자동이지만, 로그인이 되는지 API가 200을 반환하는지 자동으로 검증하지 못한다. Playwright로 E2E 테스트를 붙이는 게 다음 과제다.
 
-SealedSecrets는 키 로테이션 시 모든 시크릿을 재암호화해야 한다. 아직 시크릿이 10개 미만이라 수동으로 가능하지만, 늘어나면 스크립트가 필요할 것이다.
+SealedSecrets는 키 로테이션 시 모든 시크릿을 재암호화해야 한다. 지금은 시크릿 수가 적어서 수동으로 가능하지만, 규모가 커지면 자동화 스크립트가 필요할 것이다.
 
-Preview 환경의 첫 배포는 cold start 때문에 3분 정도 걸린다. 이미지 풀에 시간이 소요되는데, AKS 노드의 이미지 캐시나 ACR의 proximity placement로 개선할 수 있다.
-
-그래도 이 구조가 주는 가장 큰 가치는 명확하다. **개발자가 "배포 좀 해주세요"라고 말할 일이 없어졌다.** PR을 올리면 환경이 생기고, 리뷰어가 직접 동작을 확인하고, 머지하면 Sandbox에 반영된다. 사람이 개입하는 지점은 "코드 작성"과 "리뷰 승인" 뿐이다.
+그래도 가장 큰 변화는 명확하다. 리뷰어가 "로컬에서 띄워봐야 할 것 같아요"라고 말하는 대신, PR에 자동으로 달리는 Preview URL을 클릭한다. 코드를 읽으면서 동작을 직접 확인하고, 머지하면 Sandbox에 반영된다. 사람이 개입하는 건 코드를 작성하고 리뷰를 승인하는 것뿐이다.
