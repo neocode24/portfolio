@@ -1,0 +1,36 @@
+<!-- giscus: GitHub Discussions 기반 댓글 -->
+<section class="mt-12 pt-8 border-t border-(--color-border) dark:border-(--color-dark-border)">
+  <script
+    src="https://giscus.app/client.js"
+    data-repo="neocode24/portfolio"
+    data-repo-id="R_kgDOQPCcTQ"
+    data-category="Announcements"
+    data-category-id="DIC_kwDOQPCcTc4C3hLE"
+    data-mapping="pathname"
+    data-strict="0"
+    data-reactions-enabled="1"
+    data-emit-metadata="0"
+    data-input-position="top"
+    data-theme="preferred_color_scheme"
+    data-lang="ko"
+    crossorigin="anonymous"
+    async
+  ></script>
+</section>
+
+<script is:inline>
+  // 테마 토글 시 giscus iframe에도 반영
+  const toggle = document.getElementById('theme-toggle');
+  if (toggle) {
+    toggle.addEventListener('click', () => {
+      const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      const iframe = document.querySelector('iframe.giscus-frame');
+      if (iframe) {
+        iframe.contentWindow.postMessage(
+          { giscus: { setConfig: { theme } } },
+          'https://giscus.app'
+        );
+      }
+    });
+  }
+</script>
