@@ -1,0 +1,339 @@
+<!DOCTYPE html><html lang="ko"> <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="description" content="KEP-4639 기반 Image Volumes 기능으로 OCI 이미지를 Pod에 읽기 전용 볼륨으로 직접 마운트하는 방법과 동작 원리, 활용 사례를 정리합니다."><meta name="google-site-verification" content="FXHFdkKOeWrTnGu9UVF3KjQJ34VlGuYI441eQIir-Es"><meta name="naver-site-verification" content="275f1bc1ba9e44472d530476a8c2373dda3e501a"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="canonical" href="https://blog.neocode24.com/blog/kubernetes-image-volumes-oci/"><link rel="sitemap" href="/sitemap-index.xml"><link rel="alternate" type="application/rss+xml" title="neocode24" href="/rss.xml"><!-- Open Graph --><meta property="og:type" content="website"><meta property="og:url" content="https://blog.neocode24.com/blog/kubernetes-image-volumes-oci/"><meta property="og:title" content="Kubernetes Image Volumes - OCI 이미지를 볼륨으로 마운트하기 | neocode24"><meta property="og:description" content="KEP-4639 기반 Image Volumes 기능으로 OCI 이미지를 Pod에 읽기 전용 볼륨으로 직접 마운트하는 방법과 동작 원리, 활용 사례를 정리합니다."><meta property="og:image" content="https://blog.neocode24.com/images/hero-handshake.png"><meta property="og:locale" content="ko_KR"><meta property="og:site_name" content="neocode24"><!-- Twitter --><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="Kubernetes Image Volumes - OCI 이미지를 볼륨으로 마운트하기 | neocode24"><meta name="twitter:description" content="KEP-4639 기반 Image Volumes 기능으로 OCI 이미지를 Pod에 읽기 전용 볼륨으로 직접 마운트하는 방법과 동작 원리, 활용 사례를 정리합니다."><meta name="twitter:image" content="https://blog.neocode24.com/images/hero-handshake.png"><title>Kubernetes Image Volumes - OCI 이미지를 볼륨으로 마운트하기 | neocode24</title><script>
+      const theme = localStorage.getItem('theme') ||
+        (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+    </script><link rel="stylesheet" href="/_astro/_slug_.raLWOr79.css"></head> <body class="min-h-screen flex flex-col bg-(--color-bg) text-(--color-text) dark:bg-(--color-dark-bg) dark:text-(--color-dark-text) transition-colors duration-200"> <header class="sticky top-0 z-50 w-full border-b border-(--color-border) dark:border-(--color-dark-border) bg-(--color-bg)/95 dark:bg-(--color-dark-bg)/95 backdrop-blur-sm transition-colors duration-200"> <nav class="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between"> <a href="/" class="text-lg font-bold text-(--color-text) dark:text-(--color-dark-text) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors">
+neocode24
+</a> <div class="flex items-center gap-4"> <a href="/blog" class="text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors"> Blog </a><a href="/about" class="text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors"> About </a> <!-- Lucide Sun/Moon 아이콘으로 다크모드 토글 --><button id="theme-toggle" type="button" class="p-1.5 rounded-md hover:bg-(--color-bg-secondary) dark:hover:bg-(--color-dark-bg-secondary) transition-colors" aria-label="테마 전환"> <!-- Sun (라이트 모드에서 보임) --> <svg id="icon-sun" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden dark:block text-(--color-dark-text-secondary)"> <circle cx="12" cy="12" r="4"></circle> <path d="M12 2v2"></path> <path d="M12 20v2"></path> <path d="m4.93 4.93 1.41 1.41"></path> <path d="m17.66 17.66 1.41 1.41"></path> <path d="M2 12h2"></path> <path d="M20 12h2"></path> <path d="m6.34 17.66-1.41 1.41"></path> <path d="m19.07 4.93-1.41 1.41"></path> </svg> <!-- Moon (다크 모드에서 보임) --> <svg id="icon-moon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="block dark:hidden text-(--color-text-secondary)"> <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path> </svg> </button> <script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  });
+</script> </div> </nav> </header> <main class="flex-1 w-full mx-auto px-4 py-8 max-w-6xl">   <script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"Kubernetes Image Volumes - OCI 이미지를 볼륨으로 마운트하기","description":"KEP-4639 기반 Image Volumes 기능으로 OCI 이미지를 Pod에 읽기 전용 볼륨으로 직접 마운트하는 방법과 동작 원리, 활용 사례를 정리합니다.","datePublished":"2026-03-02T00:00:00.000Z","author":{"@type":"Person","name":"neocode24","url":"https://github.com/neocode24"},"publisher":{"@type":"Person","name":"neocode24"},"keywords":"kubernetes, oci, container, volume, devops"}</script> <div class="lg:grid lg:grid-cols-[1fr_14rem] lg:gap-8"> <div class="min-w-0"> <article> <header class="mb-8 border-b border-(--color-border) dark:border-(--color-dark-border) pb-6"> <h1 class="text-3xl font-bold mb-3">Kubernetes Image Volumes - OCI 이미지를 볼륨으로 마운트하기</h1> <div class="flex items-center gap-3 text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> <time datetime="2026-03-02T00:00:00.000Z"> 2026년 3월 2일 </time>  <span>&middot; 8분 읽기</span> </div> <div class="flex flex-wrap gap-2 mt-3"> <span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> kubernetes </span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> oci </span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> container </span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> volume </span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> devops </span> </div> </header> <div class="prose dark:prose-invert">  <blockquote>
+<p>KEP-4639: VolumeSource - OCI Artifact and/or Image
+v1.31 Alpha → v1.33 Beta → <strong>v1.35 Beta (기본 활성화)</strong> → v1.36 GA 예정
+OCI 이미지를 레지스트리에서 가져와 읽기 전용 볼륨으로 Pod에 직접 마운트</p>
+</blockquote>
+<h2 id="개요">개요</h2>
+<p>OCI 이미지 또는 아티팩트를 Kubernetes의 네이티브 볼륨 소스로 사용하는 기능이다. 기존에는 컨테이너 이미지 안에 데이터를 함께 빌드하거나, S3/GCS 같은 외부 스토리지를 사용해야 했지만, 이제 OCI 이미지를 직접 볼륨으로 마운트할 수 있다.</p>
+<blockquote>
+<p><strong>참고</strong>: v1.35에서는 Beta (기본 활성화) 상태이며, GA(Stable)는 v1.36에서 예정이다.</p>
+</blockquote>
+<h2 id="동작-원리">동작 원리</h2>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>[Pod Spec]</span></span>
+<span class="line"><span>  volumes:</span></span>
+<span class="line"><span>    - name: my-data</span></span>
+<span class="line"><span>      image:</span></span>
+<span class="line"><span>        reference: "registry.io/my-data:v1"</span></span>
+<span class="line"><span>        pullPolicy: IfNotPresent</span></span>
+<span class="line"><span>          │</span></span>
+<span class="line"><span>          ▼</span></span>
+<span class="line"><span>[Kubelet]</span></span>
+<span class="line"><span>  │</span></span>
+<span class="line"><span>  ├─ CRI API를 통해 컨테이너 런타임에 이미지 pull 요청</span></span>
+<span class="line"><span>  │</span></span>
+<span class="line"><span>  ▼</span></span>
+<span class="line"><span>[Container Runtime (containerd / CRI-O)]</span></span>
+<span class="line"><span>  │</span></span>
+<span class="line"><span>  ├─ 1. OCI 이미지/아티팩트를 레지스트리에서 pull</span></span>
+<span class="line"><span>  ├─ 2. 매니페스트의 레이어들을 단일 디렉토리로 병합</span></span>
+<span class="line"><span>  │     (컨테이너 이미지와 동일한 방식으로 overlay)</span></span>
+<span class="line"><span>  ├─ 3. 읽기 전용(ro) + 실행 불가(noexec)로 마운트</span></span>
+<span class="line"><span>  │</span></span>
+<span class="line"><span>  ▼</span></span>
+<span class="line"><span>[Pod Container]</span></span>
+<span class="line"><span>  │</span></span>
+<span class="line"><span>  └─ volumeMount 경로에서 이미지 내용에 직접 접근</span></span>
+<span class="line"><span>     (예: /data/model-weights, /data/config 등)</span></span></code></pre>
+<h3 id="핵심-포인트">핵심 포인트</h3>
+<ol>
+<li><strong>CRI 인터페이스 확장</strong>: Kubelet이 CRI API를 통해 런타임에 이미지 pull + 마운트를 요청</li>
+<li><strong>레이어 병합</strong>: OCI 이미지의 레이어들이 컨테이너 이미지와 동일한 방식으로 병합되어 단일 디렉토리로 노출</li>
+<li><strong>읽기 전용</strong>: 보안을 위해 항상 read-only, noexec로 마운트</li>
+<li><strong>이미지 캐싱</strong>: 컨테이너 이미지와 동일한 캐싱 메커니즘 활용</li>
+</ol>
+<h2 id="pod-정의-예제">Pod 정의 예제</h2>
+<h3 id="기본-사용법">기본 사용법</h3>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">apiVersion</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">v1</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">kind</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">Pod</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">metadata</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">  name</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">ml-inference</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">spec</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">  volumes</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    - </span><span style="color:#22863A;--shiki-dark:#85E89D">name</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">model-weights</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">      image</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">        reference</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">"registry.io/ml-models/gpt-mini:v2"</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">        pullPolicy</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">IfNotPresent</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">  containers</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    - </span><span style="color:#22863A;--shiki-dark:#85E89D">name</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">model-server</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">      image</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">registry.io/model-server:latest</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">      volumeMounts</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        - </span><span style="color:#22863A;--shiki-dark:#85E89D">name</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">model-weights</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">          mountPath</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">/models</span></span></code></pre>
+<h3 id="웹-서버--정적-콘텐츠-분리">웹 서버 + 정적 콘텐츠 분리</h3>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">apiVersion</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">v1</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">kind</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">Pod</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">metadata</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">  name</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">web-server</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">spec</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">  volumes</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    - </span><span style="color:#22863A;--shiki-dark:#85E89D">name</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">web-assets</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">      image</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">        reference</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">"registry.io/my-website:v3.1"</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">        pullPolicy</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">IfNotPresent</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    - </span><span style="color:#22863A;--shiki-dark:#85E89D">name</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">nginx-config</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">      image</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">        reference</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">"registry.io/nginx-config:production"</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">        pullPolicy</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">IfNotPresent</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">  containers</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    - </span><span style="color:#22863A;--shiki-dark:#85E89D">name</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">nginx</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">      image</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">nginx:alpine</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">      volumeMounts</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        - </span><span style="color:#22863A;--shiki-dark:#85E89D">name</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">web-assets</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">          mountPath</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">/usr/share/nginx/html</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        - </span><span style="color:#22863A;--shiki-dark:#85E89D">name</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">nginx-config</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">          mountPath</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">/etc/nginx/conf.d</span></span></code></pre>
+<h3 id="보안-스캐너--시그니처-db">보안 스캐너 + 시그니처 DB</h3>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">apiVersion</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">v1</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">kind</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">Pod</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">metadata</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">  name</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">malware-scanner</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">spec</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">  volumes</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    - </span><span style="color:#22863A;--shiki-dark:#85E89D">name</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">signatures</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">      image</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">        reference</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">"private-registry.io/malware-sigs:2026-03-01"</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">        pullPolicy</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">Always</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">  containers</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    - </span><span style="color:#22863A;--shiki-dark:#85E89D">name</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">scanner</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">      image</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">public-registry.io/clamav:latest</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">      volumeMounts</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        - </span><span style="color:#22863A;--shiki-dark:#85E89D">name</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">signatures</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">          mountPath</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">/var/lib/clamav</span></span></code></pre>
+<h2 id="pull-policy">Pull Policy</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>값</th><th>동작</th><th>기본 적용</th></tr></thead><tbody><tr><td><strong>Always</strong></td><td>항상 pull 시도, 실패 시 Pod 생성 실패</td><td><code>:latest</code> 태그 사용 시</td></tr><tr><td><strong>IfNotPresent</strong></td><td>로컬에 없을 때만 pull</td><td>그 외 태그 사용 시</td></tr><tr><td><strong>Never</strong></td><td>pull 하지 않음, 로컬만 사용</td><td>명시적 지정 필요</td></tr></tbody></table>
+<h2 id="제약-사항">제약 사항</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>항목</th><th>상태</th></tr></thead><tbody><tr><td>읽기 전용</td><td>✅ 항상 ro + noexec</td></tr><tr><td>subPath 마운트</td><td>❌ 미지원</td></tr><tr><td>fsGroupChangePolicy</td><td>❌ 이 볼륨 타입에 적용 안 됨</td></tr><tr><td>Pod 재생성 시</td><td>볼륨이 re-resolve됨 (최신 이미지 반영)</td></tr><tr><td>런타임 요구</td><td>containerd 또는 CRI-O (OCI 이미지 볼륨 지원 필요)</td></tr></tbody></table>
+<h2 id="기존-방식과-비교">기존 방식과 비교</h2>
+<h3 id="before-데이터를-컨테이너에-포함">Before: 데이터를 컨테이너에 포함</h3>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>[app-image:v1] = 앱 코드 + ML 모델(5GB) + 설정 파일</span></span>
+<span class="line"><span>→ 이미지 크기 거대, 앱 업데이트마다 모델도 함께 빌드</span></span>
+<span class="line"><span>→ 모델만 업데이트하려면 전체 이미지 재빌드 필요</span></span></code></pre>
+<h3 id="before-외부-스토리지-사용">Before: 외부 스토리지 사용</h3>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>[app-image:v1] = 앱 코드만</span></span>
+<span class="line"><span>[S3/GCS] = ML 모델, 설정 파일</span></span>
+<span class="line"><span>→ initContainer로 다운로드 or 앱 내에서 fetch</span></span>
+<span class="line"><span>→ 추가 비용, 버킷 관리, 권한 설정 필요</span></span>
+<span class="line"><span>→ 네트워크 의존성</span></span></code></pre>
+<h3 id="after-image-volumes">After: Image Volumes</h3>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>[app-image:v1] = 앱 코드만</span></span>
+<span class="line"><span>[model-image:v2] = ML 모델 (OCI 이미지로 패키징)</span></span>
+<span class="line"><span>[config-image:prod] = 설정 파일 (OCI 이미지로 패키징)</span></span>
+<span class="line"><span>→ 각각 독립적으로 버전 관리, push, pull</span></span>
+<span class="line"><span>→ OCI 레지스트리의 캐싱/배포 인프라 그대로 활용</span></span>
+<span class="line"><span>→ 추가 스토리지 서비스 불필요</span></span></code></pre>
+<h2 id="활용-사례">활용 사례</h2>
+<h3 id="1-aiml-모델-배포">1. AI/ML 모델 배포</h3>
+<ul>
+<li>LLM 가중치를 OCI 아티팩트로 패키징</li>
+<li>모델 서버와 모델 가중치를 분리</li>
+<li>모델 업데이트 시 서버 이미지 재빌드 불필요</li>
+<li>OCI 레지스트리의 레이어 공유로 대용량 모델 효율적 배포</li>
+</ul>
+<h3 id="2-웹-서버-정적-자산">2. 웹 서버 정적 자산</h3>
+<ul>
+<li>nginx/Apache 베이스 이미지 공유</li>
+<li>사이트별 콘텐츠만 별도 이미지로 관리</li>
+<li>중복 제거, 빠른 배포</li>
+</ul>
+<h3 id="3-보안-시그니처-배포">3. 보안 시그니처 배포</h3>
+<ul>
+<li>공개 스캐너 이미지 + 비공개 시그니처 DB 분리</li>
+<li>시그니처만 별도 업데이트 가능</li>
+</ul>
+<h3 id="4-설정-파일-배포">4. 설정 파일 배포</h3>
+<ul>
+<li>환경별 설정을 OCI 이미지로 관리</li>
+<li>ConfigMap보다 대용량 설정 지원</li>
+<li>버전 관리 + 롤백 용이</li>
+</ul>
+<h3 id="5-java-앱-자동-계측">5. Java 앱 자동 계측</h3>
+<ul>
+<li>OpenTelemetry Java Agent를 OCI 이미지로 마운트</li>
+<li>앱 이미지 수정 없이 자동 계측 적용</li>
+<li>Agent 업데이트 시 볼륨 이미지만 태그 변경</li>
+</ul>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">apiVersion</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">apps/v1</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">kind</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">Deployment</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">metadata</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">  name</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">my-springboot-app</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">spec</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">  template</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">    spec</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">      containers</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        - </span><span style="color:#22863A;--shiki-dark:#85E89D">name</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">app</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">          image</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">my-app:latest</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">          env</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">            - </span><span style="color:#22863A;--shiki-dark:#85E89D">name</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">JAVA_TOOL_OPTIONS</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">              value</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">"-javaagent:/otel/opentelemetry-javaagent.jar"</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">          volumeMounts</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">            - </span><span style="color:#22863A;--shiki-dark:#85E89D">name</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">otel-agent</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">              mountPath</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">/otel</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">              readOnly</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#005CC5;--shiki-dark:#79B8FF">true</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">      volumes</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        - </span><span style="color:#22863A;--shiki-dark:#85E89D">name</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">otel-agent</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">          image</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">            reference</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">docker.io/otel/opentelemetry-javaagent:2.12.0</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">            pullPolicy</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">IfNotPresent</span></span>
+<span class="line"></span></code></pre>
+<p>init container 없이, emptyDir 없이, 이미지 안의 jar 파일이 /otel 경로에 바로 마운트</p>
+<h2 id="oci-이미지-빌드-방법">OCI 이미지 빌드 방법</h2>
+<p>데이터를 OCI 이미지로 패키징하는 간단한 예:</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="dockerfile"><code><span class="line"><span style="color:#6A737D;--shiki-dark:#6A737D"># Dockerfile.model</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">FROM</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> scratch</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">COPY</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> ./model-weights /models</span></span></code></pre>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6F42C1;--shiki-dark:#B392F0">docker</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> build</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> -f</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> Dockerfile.model</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> -t</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> registry.io/ml-models/gpt-mini:v2</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> .</span></span>
+<span class="line"><span style="color:#6F42C1;--shiki-dark:#B392F0">docker</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> push</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> registry.io/ml-models/gpt-mini:v2</span></span></code></pre>
+<p>또는 ORAS (OCI Registry As Storage)를 사용:</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6A737D;--shiki-dark:#6A737D"># ORAS로 아티팩트 push</span></span>
+<span class="line"><span style="color:#6F42C1;--shiki-dark:#B392F0">oras</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> push</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> registry.io/ml-models/gpt-mini:v2</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> \</span></span>
+<span class="line"><span style="color:#032F62;--shiki-dark:#9ECBFF">  ./model-weights:application/octet-stream</span></span></code></pre>
+<h2 id="보안-고려사항">보안 고려사항</h2>
+<ul>
+<li>신뢰할 수 없는 레지스트리의 이미지를 볼륨으로 마운트하지 않도록 정책 필요</li>
+<li>실행 가능한 콘텐츠를 포함한 이미지 마운트 주의 (noexec이지만 스크립트 해석기를 통한 실행 가능)</li>
+<li>이미지 서명 검증 (cosign, notation 등) 권장</li>
+<li>NetworkPolicy로 레지스트리 접근 제한</li>
+</ul>
+<h2 id="타임라인">타임라인</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>버전</th><th>상태</th><th>Feature Gate</th></tr></thead><tbody><tr><td>v1.31 (2024)</td><td>Alpha</td><td><code>ImageVolume=false</code> (기본 비활성)</td></tr><tr><td>v1.33 (2025)</td><td>Beta</td><td><code>ImageVolume=false</code> (기본 비활성)</td></tr><tr><td><strong>v1.35 (2026)</strong></td><td><strong>Beta (기본 활성)</strong></td><td><strong><code>ImageVolume=true</code></strong></td></tr><tr><td>v1.36 (2026 예정)</td><td>GA (Stable) 목표</td><td>Feature Gate 제거</td></tr></tbody></table>  </div> </article> <section class="mt-12 pt-8 border-t border-(--color-border) dark:border-(--color-dark-border)"><h2 class="text-lg font-semibold mb-4">관련 글</h2><div class="grid grid-cols-1 sm:grid-cols-3 gap-4"><a href="/blog/kubernetes-1-35-new-features/" class="block rounded-lg bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) p-4 hover:bg-(--color-border) dark:hover:bg-(--color-dark-border) transition-colors"><h3 class="text-sm font-medium line-clamp-2 mb-2">Kubernetes 1.35 신규 기능 총정리</h3><div class="flex flex-wrap gap-1"><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">kubernetes</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">cloud-native</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">container</span></div></a><a href="/blog/ai-portal-cicd-pipeline/" class="block rounded-lg bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) p-4 hover:bg-(--color-border) dark:hover:bg-(--color-dark-border) transition-colors"><h3 class="text-sm font-medium line-clamp-2 mb-2">모노레포 CI/CD 실전 구성 — PR Preview부터 자동 정리까지</h3><div class="flex flex-wrap gap-1"><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">devops</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">cicd</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">kubernetes</span></div></a><a href="/blog/litellm-ai-gateway/" class="block rounded-lg bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) p-4 hover:bg-(--color-border) dark:hover:bg-(--color-dark-border) transition-colors"><h3 class="text-sm font-medium line-clamp-2 mb-2">LiteLLM으로 LLM API 통합하기 — 개인 인프라에서 엔터프라이즈까지</h3><div class="flex flex-wrap gap-1"><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">ai</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">llm</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">gateway</span></div></a></div></section> <!-- giscus: GitHub Discussions 기반 댓글 --><section class="mt-12 pt-8 border-t border-(--color-border) dark:border-(--color-dark-border)"> <div id="giscus-container"></div> </section> <script>
+  function loadGiscus() {
+    const container = document.getElementById('giscus-container');
+    if (!container || container.querySelector('script')) return;
+
+    const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+    const script = document.createElement('script');
+    script.src = 'https://giscus.app/client.js';
+    script.setAttribute('data-repo', 'neocode24/portfolio');
+    script.setAttribute('data-repo-id', 'R_kgDOQPCcTQ');
+    script.setAttribute('data-category', 'Announcements');
+    script.setAttribute('data-category-id', 'DIC_kwDOQPCcTc4C3hLE');
+    script.setAttribute('data-mapping', 'pathname');
+    script.setAttribute('data-strict', '0');
+    script.setAttribute('data-reactions-enabled', '1');
+    script.setAttribute('data-emit-metadata', '0');
+    script.setAttribute('data-input-position', 'top');
+    script.setAttribute('data-theme', theme);
+    script.setAttribute('data-lang', 'ko');
+    script.crossOrigin = 'anonymous';
+    script.async = true;
+    container.appendChild(script);
+  }
+
+  loadGiscus();
+
+  // 테마 토글 시 giscus iframe에도 반영
+  const toggle = document.getElementById('theme-toggle');
+  if (toggle) {
+    toggle.addEventListener('click', () => {
+      const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      const iframe = document.querySelector('iframe.giscus-frame');
+      if (iframe) {
+        iframe.contentWindow.postMessage(
+          { giscus: { setConfig: { theme } } },
+          'https://giscus.app'
+        );
+      }
+    });
+  }
+</script> </div> <aside class="hidden lg:block"> <div class="sticky top-20 space-y-8"> <nav class="toc" aria-label="목차"><h2 class="text-sm font-semibold mb-3 text-(--color-text) dark:text-(--color-dark-text)">
+목차
+</h2><ul class="space-y-1.5 text-sm"><li><a href="#개요" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="개요">개요</a></li><li><a href="#동작-원리" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="동작-원리">동작 원리</a></li><li class="pl-3"><a href="#핵심-포인트" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="핵심-포인트">핵심 포인트</a></li><li><a href="#pod-정의-예제" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="pod-정의-예제">Pod 정의 예제</a></li><li class="pl-3"><a href="#기본-사용법" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="기본-사용법">기본 사용법</a></li><li class="pl-3"><a href="#웹-서버--정적-콘텐츠-분리" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="웹-서버--정적-콘텐츠-분리">웹 서버 + 정적 콘텐츠 분리</a></li><li class="pl-3"><a href="#보안-스캐너--시그니처-db" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="보안-스캐너--시그니처-db">보안 스캐너 + 시그니처 DB</a></li><li><a href="#pull-policy" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="pull-policy">Pull Policy</a></li><li><a href="#제약-사항" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="제약-사항">제약 사항</a></li><li><a href="#기존-방식과-비교" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="기존-방식과-비교">기존 방식과 비교</a></li><li class="pl-3"><a href="#before-데이터를-컨테이너에-포함" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="before-데이터를-컨테이너에-포함">Before: 데이터를 컨테이너에 포함</a></li><li class="pl-3"><a href="#before-외부-스토리지-사용" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="before-외부-스토리지-사용">Before: 외부 스토리지 사용</a></li><li class="pl-3"><a href="#after-image-volumes" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="after-image-volumes">After: Image Volumes</a></li><li><a href="#활용-사례" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="활용-사례">활용 사례</a></li><li class="pl-3"><a href="#1-aiml-모델-배포" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="1-aiml-모델-배포">1. AI/ML 모델 배포</a></li><li class="pl-3"><a href="#2-웹-서버-정적-자산" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="2-웹-서버-정적-자산">2. 웹 서버 정적 자산</a></li><li class="pl-3"><a href="#3-보안-시그니처-배포" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="3-보안-시그니처-배포">3. 보안 시그니처 배포</a></li><li class="pl-3"><a href="#4-설정-파일-배포" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="4-설정-파일-배포">4. 설정 파일 배포</a></li><li class="pl-3"><a href="#5-java-앱-자동-계측" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="5-java-앱-자동-계측">5. Java 앱 자동 계측</a></li><li><a href="#oci-이미지-빌드-방법" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="oci-이미지-빌드-방법">OCI 이미지 빌드 방법</a></li><li><a href="#보안-고려사항" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="보안-고려사항">보안 고려사항</a></li><li><a href="#타임라인" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="타임라인">타임라인</a></li></ul></nav><script type="module">function o(){const n=document.querySelectorAll(".toc-link");if(n.length===0)return;const r=Array.from(n).map(e=>e.dataset.slug).map(e=>document.getElementById(e)).filter(Boolean);if(r.length===0)return;let s="";const a=new IntersectionObserver(e=>{for(const t of e)if(t.isIntersecting){s=t.target.id;break}n.forEach(t=>{t.classList.toggle("active",t.dataset.slug===s)})},{rootMargin:"-80px 0px -70% 0px",threshold:0});r.forEach(e=>a.observe(e))}o();document.addEventListener("astro:after-swap",o);</script> <section><h2 class="text-sm font-semibold mb-3 text-(--color-text) dark:text-(--color-dark-text)">
+최근 글
+</h2><ul class="space-y-2 text-sm"><li><a href="/blog/kubernetes-1-35-new-features" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">Kubernetes 1.35 신규 기능 총정리</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li><li><a href="/blog/ai-portal-cicd-pipeline" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">모노레포 CI/CD 실전 구성 — PR Preview부터 자동 정리까지</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li><li><a href="/blog/nanoclaw-architecture" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">Telegram 메시지 하나가 AI 에이전트가 되기까지 — NanoClaw 아키텍처 해부</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li><li><a href="/blog/litellm-ai-gateway" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">LiteLLM으로 LLM API 통합하기 — 개인 인프라에서 엔터프라이즈까지</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li><li><a href="/blog/kubernetes-ipvs-deprecated-nftables" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">kube-proxy IPVS가 Deprecated된 진짜 이유 — nftables 전환 가이드</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li></ul></section> <section><h2 class="text-sm font-semibold mb-3 text-(--color-text) dark:text-(--color-dark-text)">
+태그
+</h2><div class="flex flex-wrap gap-1.5"><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="7개 글">kubernetes</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="7개 글">devops</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="4개 글">ai</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">container</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">claude</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">architecture</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">telegram</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">cloudflare</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">cloud-native</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">cicd</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">gitops</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">github-actions</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">docker</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">llm</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">gateway</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">openai</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">networking</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">nftables</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">kube-proxy</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">ebpf</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">blog</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">astro</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">github-pages</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">automation</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">pod</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">resource-management</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">oci</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">volume</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">litellm</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">infrastructure</span></div></section> </div> </aside> </div> <script type="module">function o(){document.querySelectorAll(".prose pre[data-language]").forEach(e=>{if(e.querySelector(".code-header"))return;const c=e.getAttribute("data-language")||"",t=document.createElement("div");t.className="code-header",t.innerHTML=`<span class="code-lang">${c}</span><span class="code-copy" role="button" aria-label="코드 복사">복사</span>`,e.insertBefore(t,e.firstChild),t.querySelector(".code-copy").addEventListener("click",async()=>{const n=e.querySelector("code");if(!n)return;const r=n.innerText.replace(/^\d+\n?/gm,"");await navigator.clipboard.writeText(r);const a=t.querySelector(".code-copy");a.textContent="완료",setTimeout(()=>{a.textContent="복사"},1500)})})}o();document.addEventListener("astro:after-swap",o);</script> <script type="module" src="/_astro/BlogPost.astro_astro_type_script_index_1_lang.DzPawRLx.js"></script>  </main> <footer class="w-full border-t border-(--color-border) dark:border-(--color-dark-border) transition-colors duration-200"> <div class="max-w-3xl mx-auto px-4 py-6 flex items-center justify-between text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> <span>&copy; 2026 neocode24</span> <a href="https://github.com/neocode24" target="_blank" rel="noopener noreferrer" class="hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors" aria-label="GitHub"> <!-- Lucide: Github --> <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"> <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path> <path d="M9 18c-4.51 2-5-2-7-2"></path> </svg> </a> </div> </footer> </body></html>

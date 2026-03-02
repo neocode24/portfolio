@@ -1,0 +1,406 @@
+<!DOCTYPE html><html lang="ko"> <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="description" content="NanoClaw의 Telegram 기능을 skills engine 기반으로 전환하고, upstream과 fork custom의 3계층 코드 구조를 확립한 과정을 정리합니다."><meta name="google-site-verification" content="FXHFdkKOeWrTnGu9UVF3KjQJ34VlGuYI441eQIir-Es"><meta name="naver-site-verification" content="275f1bc1ba9e44472d530476a8c2373dda3e501a"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="canonical" href="https://blog.neocode24.com/blog/nanoclaw-skills-telegram-fork/"><link rel="sitemap" href="/sitemap-index.xml"><link rel="alternate" type="application/rss+xml" title="neocode24" href="/rss.xml"><!-- Open Graph --><meta property="og:type" content="website"><meta property="og:url" content="https://blog.neocode24.com/blog/nanoclaw-skills-telegram-fork/"><meta property="og:title" content="NanoClaw Skills 기반 Telegram 전환 및 Fork 정리 | neocode24"><meta property="og:description" content="NanoClaw의 Telegram 기능을 skills engine 기반으로 전환하고, upstream과 fork custom의 3계층 코드 구조를 확립한 과정을 정리합니다."><meta property="og:image" content="https://blog.neocode24.com/images/hero-handshake.png"><meta property="og:locale" content="ko_KR"><meta property="og:site_name" content="neocode24"><!-- Twitter --><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="NanoClaw Skills 기반 Telegram 전환 및 Fork 정리 | neocode24"><meta name="twitter:description" content="NanoClaw의 Telegram 기능을 skills engine 기반으로 전환하고, upstream과 fork custom의 3계층 코드 구조를 확립한 과정을 정리합니다."><meta name="twitter:image" content="https://blog.neocode24.com/images/hero-handshake.png"><title>NanoClaw Skills 기반 Telegram 전환 및 Fork 정리 | neocode24</title><script>
+      const theme = localStorage.getItem('theme') ||
+        (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+    </script><link rel="stylesheet" href="/_astro/_slug_.raLWOr79.css"></head> <body class="min-h-screen flex flex-col bg-(--color-bg) text-(--color-text) dark:bg-(--color-dark-bg) dark:text-(--color-dark-text) transition-colors duration-200"> <header class="sticky top-0 z-50 w-full border-b border-(--color-border) dark:border-(--color-dark-border) bg-(--color-bg)/95 dark:bg-(--color-dark-bg)/95 backdrop-blur-sm transition-colors duration-200"> <nav class="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between"> <a href="/" class="text-lg font-bold text-(--color-text) dark:text-(--color-dark-text) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors">
+neocode24
+</a> <div class="flex items-center gap-4"> <a href="/blog" class="text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors"> Blog </a><a href="/about" class="text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors"> About </a> <!-- Lucide Sun/Moon 아이콘으로 다크모드 토글 --><button id="theme-toggle" type="button" class="p-1.5 rounded-md hover:bg-(--color-bg-secondary) dark:hover:bg-(--color-dark-bg-secondary) transition-colors" aria-label="테마 전환"> <!-- Sun (라이트 모드에서 보임) --> <svg id="icon-sun" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden dark:block text-(--color-dark-text-secondary)"> <circle cx="12" cy="12" r="4"></circle> <path d="M12 2v2"></path> <path d="M12 20v2"></path> <path d="m4.93 4.93 1.41 1.41"></path> <path d="m17.66 17.66 1.41 1.41"></path> <path d="M2 12h2"></path> <path d="M20 12h2"></path> <path d="m6.34 17.66-1.41 1.41"></path> <path d="m19.07 4.93-1.41 1.41"></path> </svg> <!-- Moon (다크 모드에서 보임) --> <svg id="icon-moon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="block dark:hidden text-(--color-text-secondary)"> <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path> </svg> </button> <script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  });
+</script> </div> </nav> </header> <main class="flex-1 w-full mx-auto px-4 py-8 max-w-6xl">   <script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"NanoClaw Skills 기반 Telegram 전환 및 Fork 정리","description":"NanoClaw의 Telegram 기능을 skills engine 기반으로 전환하고, upstream과 fork custom의 3계층 코드 구조를 확립한 과정을 정리합니다.","datePublished":"2026-03-02T00:00:00.000Z","author":{"@type":"Person","name":"neocode24","url":"https://github.com/neocode24"},"publisher":{"@type":"Person","name":"neocode24"},"keywords":"ai, claude, telegram, architecture, devops"}</script> <div class="lg:grid lg:grid-cols-[1fr_14rem] lg:gap-8"> <div class="min-w-0"> <article> <header class="mb-8 border-b border-(--color-border) dark:border-(--color-dark-border) pb-6"> <h1 class="text-3xl font-bold mb-3">NanoClaw Skills 기반 Telegram 전환 및 Fork 정리</h1> <div class="flex items-center gap-3 text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> <time datetime="2026-03-02T00:00:00.000Z"> 2026년 3월 2일 </time>  <span>&middot; 10분 읽기</span> </div> <div class="flex flex-wrap gap-2 mt-3"> <span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> ai </span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> claude </span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> telegram </span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> architecture </span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> devops </span> </div> </header> <div class="prose dark:prose-invert">  <blockquote>
+<p>add-telegram skill 개선, fork custom 구조 확립, 브랜치 정리, upstream 동기화까지의 전체 흐름.</p>
+</blockquote>
+<h2 id="배경">배경</h2>
+<p>NanoClaw의 Telegram 기능을 수동 코드에서 skills engine 기반으로 전환하고, upstream과의 관계를 정리했다. 핵심 판단은 “NanoClaw 철학(개인 노트북 어시스턴트)에 맞는 것만 upstream에, 나머지는 fork custom으로 관리”이다.</p>
+<h2 id="3계층-코드-구조-확립">3계층 코드 구조 확립</h2>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">flowchart TD</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    UP["Upstream Base&#x3C;br/>원본 NanoClaw"] --> SK["Skills 적용&#x3C;br/>.claude/skills/ → apply-skill.ts"]</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    SK --> FK["Fork Customs&#x3C;br/>origin 레벨 관리"]</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    UP ---|"/update-nanoclaw&#x3C;br/>skill로 동기화"| SK</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    SK ---|"재적용 시&#x3C;br/>fork custom 덮어씌워짐"| FK</span></span></code></pre>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>계층</th><th>내용</th><th>관리 방법</th></tr></thead><tbody><tr><td>Upstream base</td><td>NanoClaw 원본 코드</td><td><code>git merge upstream/main</code> 또는 <code>/update-nanoclaw</code></td></tr><tr><td>Skills</td><td>add-telegram 등 skill 패키지</td><td><code>apply-skill.ts</code>로 적용, <code>.nanoclaw/state.yaml</code>에 기록</td></tr><tr><td>Fork customs</td><td>webhook, sendImage, CLAUDE_MODEL 등</td><td>origin/main에서 수동 관리</td></tr></tbody></table>
+<h2 id="add-telegram-skill-개선">add-telegram Skill 개선</h2>
+<p>기존 skill 템플릿 대비 추가된 기능:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>기능</th><th>설명</th></tr></thead><tbody><tr><td>Webhook + Polling 듀얼모드</td><td><code>TELEGRAM_WEBHOOK_URL</code> 유무로 자동 분기</td></tr><tr><td>MarkdownV2 3단계 fallback</td><td>MarkdownV2 → HTML → plain text 순차 시도</td></tr><tr><td>telegramify-markdown</td><td>마크다운을 Telegram MarkdownV2로 변환</td></tr><tr><td>sendImage</td><td>InputFile 기반 이미지 전송 + IPC 연동</td></tr><tr><td>429 retry</td><td>Telegram API rate limit 시 <code>retry_after</code>만큼 대기 후 재시도</td></tr></tbody></table>
+<h3 id="철학적-판단-webhook은-fork-custom">철학적 판단: Webhook은 Fork Custom</h3>
+<p>upstream skill 템플릿은 <strong>polling-only</strong>가 NanoClaw 철학에 부합한다.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>항목</th><th>Polling</th><th>Webhook</th></tr></thead><tbody><tr><td>설정</td><td>토큰만 넣으면 끝</td><td>공인 URL, 포트, 방화벽/터널 필요</td></tr><tr><td>환경</td><td>노트북, 가정 WiFi, NAT 뒤 OK</td><td>공인 IP 또는 터널 필수</td></tr><tr><td>대상</td><td>개인 어시스턴트</td><td>프로덕션 서비스</td></tr></tbody></table>
+<p>webhook 관련 코드(connectWebhook, TELEGRAM_WEBHOOK_URL, WEBHOOK_PORT)는 fork custom으로만 유지.</p>
+<h2 id="fork-custom-전체-목록">Fork Custom 전체 목록</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>기능</th><th>파일</th></tr></thead><tbody><tr><td>Telegram webhook 모드</td><td>telegram.ts</td></tr><tr><td>sendImage + IPC</td><td>telegram.ts, index.ts</td></tr><tr><td>MarkdownV2 3단계 fallback</td><td>telegram.ts</td></tr><tr><td>429 retry</td><td>telegram.ts</td></tr><tr><td>CLAUDE_MODEL opus 고정</td><td>config.ts, index.ts, task-scheduler.ts</td></tr><tr><td>logger.warn 수정</td><td>index.ts</td></tr><tr><td>scheduler-dedup</td><td>task-scheduler.ts</td></tr><tr><td>tool-use 로깅</td><td>agent-runner/index.ts</td></tr><tr><td>사내 VPN(ZTNA) CA 자동 주입</td><td>container-runner.ts</td></tr><tr><td>lint-staged + .nvmrc</td><td>개발환경</td></tr><tr><td>페르소나 설정</td><td>각종 설정</td></tr></tbody></table>
+<h2 id="사내-vpnztna-인증서-자동-주입-fork-custom">사내 VPN(ZTNA) 인증서 자동 주입 (Fork Custom)</h2>
+<p>사내 VPN 연결 시 ZTNA가 모든 HTTPS를 MITM하여 자체 CA로 인증서를 재발급한다. macOS 키체인에는 해당 Root CA가 설치되어 있지만, Node.js와 Docker 컨테이너는 별도 처리가 필요하다.</p>
+<h3 id="호스트-프로세스">호스트 프로세스</h3>
+<p>launchd plist에 <code>NODE_EXTRA_CA_CERTS</code> 환경변수 추가:</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="xml"><code><span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">&#x3C;</span><span style="color:#22863A;--shiki-dark:#85E89D">key</span><span style="color:#24292E;--shiki-dark:#E1E4E8">>NODE_EXTRA_CA_CERTS&#x3C;/</span><span style="color:#22863A;--shiki-dark:#85E89D">key</span><span style="color:#24292E;--shiki-dark:#E1E4E8">></span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">&#x3C;</span><span style="color:#22863A;--shiki-dark:#85E89D">string</span><span style="color:#24292E;--shiki-dark:#E1E4E8">>/path/to/corp-proxy-root.crt&#x3C;/</span><span style="color:#22863A;--shiki-dark:#85E89D">string</span><span style="color:#24292E;--shiki-dark:#E1E4E8">></span></span></code></pre>
+<h3 id="컨테이너-에이전트">컨테이너 에이전트</h3>
+<p><code>container-runner.ts</code>에서 CA 파일 존재 시 자동으로 bind mount + 환경변수 설정:</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="typescript"><code><span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">const</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> corpCaPath</span><span style="color:#D73A49;--shiki-dark:#F97583"> =</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> path.</span><span style="color:#6F42C1;--shiki-dark:#B392F0">join</span><span style="color:#24292E;--shiki-dark:#E1E4E8">(os.</span><span style="color:#6F42C1;--shiki-dark:#B392F0">homedir</span><span style="color:#24292E;--shiki-dark:#E1E4E8">(), </span><span style="color:#032F62;--shiki-dark:#9ECBFF">'Self-Signed-Certificate'</span><span style="color:#24292E;--shiki-dark:#E1E4E8">, </span><span style="color:#032F62;--shiki-dark:#9ECBFF">'corp-proxy-root.crt'</span><span style="color:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">if</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> (fs.</span><span style="color:#6F42C1;--shiki-dark:#B392F0">existsSync</span><span style="color:#24292E;--shiki-dark:#E1E4E8">(corpCaPath)) {</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">  args.</span><span style="color:#6F42C1;--shiki-dark:#B392F0">push</span><span style="color:#24292E;--shiki-dark:#E1E4E8">(</span><span style="color:#032F62;--shiki-dark:#9ECBFF">'-v'</span><span style="color:#24292E;--shiki-dark:#E1E4E8">, </span><span style="color:#032F62;--shiki-dark:#9ECBFF">`${</span><span style="color:#24292E;--shiki-dark:#E1E4E8">corpCaPath</span><span style="color:#032F62;--shiki-dark:#9ECBFF">}:/usr/local/share/ca-certificates/corp-proxy-root.crt:ro`</span><span style="color:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">  args.</span><span style="color:#6F42C1;--shiki-dark:#B392F0">push</span><span style="color:#24292E;--shiki-dark:#E1E4E8">(</span><span style="color:#032F62;--shiki-dark:#9ECBFF">'-e'</span><span style="color:#24292E;--shiki-dark:#E1E4E8">, </span><span style="color:#032F62;--shiki-dark:#9ECBFF">'NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/corp-proxy-root.crt'</span><span style="color:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre>
+<ul>
+<li>CA 파일이 없으면 mount 자체를 건너뜀 (VPN 미사용 환경에 영향 없음)</li>
+<li>SSL 검증 비활성화가 아닌 정당한 CA 추가 방식</li>
+</ul>
+<h2 id="upstream-pr-정리">Upstream PR 정리</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>PR</th><th>결과</th><th>비고</th></tr></thead><tbody><tr><td>CJK 폰트 PR</td><td>Merged</td><td>유일한 upstream 기여</td></tr><tr><td>tool-use 로깅 PR</td><td>Closed (직접)</td><td>fork custom으로 유지</td></tr><tr><td>scheduler-dedup PR</td><td>Closed (직접)</td><td>fork custom으로 유지</td></tr><tr><td>host-commands PR</td><td>Closed (직접)</td><td>skills 철학에 안 맞음</td></tr></tbody></table>
+<p>add-telegram skill 개선 PR은 미진행 — webhook/sendImage/IPC가 얽혀 polling-only 분리 비용 대비 가치 낮음.</p>
+<h3 id="upstream-pr-규칙-private-전환-후">Upstream PR 규칙 (private 전환 후)</h3>
+<p>origin repo를 private으로 전환하면서 GitHub fork 관계가 <strong>영구 분리</strong>되었다. public으로 되돌려도 fork 라벨은 복원되지 않는다 (GitHub 정책).</p>
+<p><strong>private로 유지하는 이유:</strong></p>
+<ul>
+<li>VPN 인증서 경로/처리 로직 노출 방지</li>
+<li><code>.env</code> 패턴, 도메인, 인프라 구성 등이 커밋 히스토리에 포함</li>
+<li>fork custom 코드가 개인 인프라 구조를 드러냄</li>
+</ul>
+<p><strong>upstream PR 절차:</strong></p>
+<ol>
+<li>PR 전용 public fork 생성</li>
+<li>private repo에서 해당 변경만 cherry-pick하여 clean 브랜치 생성</li>
+<li>public fork에 push → upstream PR 생성</li>
+<li>개인 인프라 코드가 섞이지 않도록 주의</li>
+</ol>
+<h2 id="브랜치-정리">브랜치 정리</h2>
+<p>모든 feature 브랜치 삭제. <code>main</code>만 남김:</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>삭제: improve/add-telegram-skill (local + origin)</span></span>
+<span class="line"><span>삭제: feat/cjk-fonts (origin, upstream 머지 완료)</span></span>
+<span class="line"><span>삭제: fix/scheduler-dedup (origin, main에 이미 반영)</span></span>
+<span class="line"><span>삭제: feat/tool-use-logging (origin, main에 이미 반영)</span></span>
+<span class="line"><span>삭제: feat/host-commands-upstream (local + origin, PR closed)</span></span></code></pre>
+<h2 id="upstream-동기화">Upstream 동기화</h2>
+<p><code>git merge upstream/main</code>으로 11커밋 수용:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>주요 변경</th><th>영향</th></tr></thead><tbody><tr><td>third-party model support</td><td>ANTHROPIC_BASE_URL/AUTH_TOKEN 추가</td></tr><tr><td><code>/update</code> → <code>/update-nanoclaw</code></td><td>skills-engine 대폭 간소화, 구 update 삭제</td></tr><tr><td>WhatsApp 메시지 정규화</td><td>whatsapp.ts 수정</td></tr></tbody></table>
+<p>충돌 없이 자동 머지 완료. 전체 392 테스트 통과.</p>
+<h2 id="개발환경-개선">개발환경 개선</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>항목</th><th>Before</th><th>After</th></tr></thead><tbody><tr><td>Pre-commit hook</td><td><code>npm run format:fix</code> (전체 포맷팅 → 잔여 변경)</td><td><code>npx lint-staged</code> (staged만 포맷팅 + re-stage)</td></tr><tr><td>Node 버전</td><td>명시 없음</td><td><code>.nvmrc</code>로 Node 22 고정</td></tr><tr><td>CLAUDE.md</td><td>기본 정보만</td><td>Work Rules 섹션 추가</td></tr><tr><td>Auto memory</td><td>없음</td><td>프로젝트별 메모리 파일 구축</td></tr></tbody></table>
+<h3 id="git-hooks--formatter-설정">Git Hooks &#x26; Formatter 설정</h3>
+<p>커밋 시 staged <code>.ts</code> 파일만 자동 포맷팅되도록 Husky + lint-staged를 구성했다.</p>
+<p><strong>문제</strong>: 기존 pre-commit hook은 <code>src/**/*.ts</code> 전체를 포맷팅해서, 커밋 후 unstaged 변경이 남는 문제가 있었다. staged 파일만 포맷팅하고 자동 re-stage하도록 변경.</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">flowchart LR</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    GC["git commit"] --> HK["Husky&#x3C;br/>pre-commit hook"]</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    HK --> LS["lint-staged&#x3C;br/>staged 파일 필터"]</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    LS --> PR["Prettier&#x3C;br/>포맷팅 + re-stage"]</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    PR --> CM["커밋 완료&#x3C;br/>잔여 변경 없음"]</span></span></code></pre>
+<p><strong>관련 devDependencies</strong>:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>패키지</th><th>버전</th><th>역할</th></tr></thead><tbody><tr><td>husky</td><td>^9.1.7</td><td>Git hooks 관리</td></tr><tr><td>lint-staged</td><td>^16.3.1</td><td>staged 파일만 lint/format</td></tr><tr><td>prettier</td><td>^3.8.1</td><td>코드 포맷터</td></tr></tbody></table>
+<h3 id="node-22-vs-25-이슈">Node 22 vs 25 이슈</h3>
+<p>서비스(launchd)는 Node 22, 터미널 기본은 Node 25. <code>better-sqlite3</code> C++ 네이티브 모듈은 Node 버전 불일치 시 <code>ERR_DLOPEN_FAILED</code> 발생. <code>npm install</code>, <code>npm rebuild</code>, 테스트 모두 Node 22 환경에서 실행해야 한다.</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6A737D;--shiki-dark:#6A737D"># Node 22 환경으로 전환 후 작업</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">export</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> NVM_DIR</span><span style="color:#D73A49;--shiki-dark:#F97583">=</span><span style="color:#032F62;--shiki-dark:#9ECBFF">"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">$HOME</span><span style="color:#032F62;--shiki-dark:#9ECBFF">/.nvm"</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> &#x26;&#x26; </span><span style="color:#005CC5;--shiki-dark:#79B8FF">.</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> "</span><span style="color:#24292E;--shiki-dark:#E1E4E8">$NVM_DIR</span><span style="color:#032F62;--shiki-dark:#9ECBFF">/nvm.sh"</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> &#x26;&#x26; </span><span style="color:#6F42C1;--shiki-dark:#B392F0">nvm</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> use</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> 22</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D;--shiki-dark:#6A737D"># better-sqlite3 리빌드 (Node 버전 변경 후 필수)</span></span>
+<span class="line"><span style="color:#6F42C1;--shiki-dark:#B392F0">npm</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> rebuild</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> better-sqlite3</span></span></code></pre>
+<h2 id="최종-상태">최종 상태</h2>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">flowchart LR</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    subgraph Git</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        M["main&#x3C;br/>v1.1.6"]</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        O["origin/main&#x3C;br/>private"]</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        U["upstream/main&#x3C;br/>v1.1.6"]</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        M --- O</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        U -.->|"git fetch upstream&#x3C;br/>/update-nanoclaw"| M</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    end</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    subgraph "PR 전용 (필요 시 생성)"</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        PF["upstream PR용&#x3C;br/>public fork"]</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        PF -.->|"cherry-pick → PR"| U</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    end</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    subgraph Service</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        S["NanoClaw 서비스&#x3C;br/>Telegram 연동"]</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    end</span></span></code></pre>
+<ul>
+<li>브랜치: <code>main</code>만 존재</li>
+<li>origin: <strong>private</strong> (fork 관계 영구 분리)</li>
+<li>upstream 동기화: <code>git fetch upstream</code> / <code>/update-nanoclaw</code> 정상 동작</li>
+<li>upstream PR: 별도 public fork 생성하여 제출</li>
+</ul>  </div> </article> <section class="mt-12 pt-8 border-t border-(--color-border) dark:border-(--color-dark-border)"><h2 class="text-lg font-semibold mb-4">관련 글</h2><div class="grid grid-cols-1 sm:grid-cols-3 gap-4"><a href="/blog/nanoclaw-architecture/" class="block rounded-lg bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) p-4 hover:bg-(--color-border) dark:hover:bg-(--color-dark-border) transition-colors"><h3 class="text-sm font-medium line-clamp-2 mb-2">Telegram 메시지 하나가 AI 에이전트가 되기까지 — NanoClaw 아키텍처 해부</h3><div class="flex flex-wrap gap-1"><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">ai</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">claude</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">docker</span></div></a><a href="/blog/litellm-ai-gateway/" class="block rounded-lg bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) p-4 hover:bg-(--color-border) dark:hover:bg-(--color-dark-border) transition-colors"><h3 class="text-sm font-medium line-clamp-2 mb-2">LiteLLM으로 LLM API 통합하기 — 개인 인프라에서 엔터프라이즈까지</h3><div class="flex flex-wrap gap-1"><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">ai</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">llm</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">gateway</span></div></a><a href="/blog/kubernetes-1-35-new-features/" class="block rounded-lg bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) p-4 hover:bg-(--color-border) dark:hover:bg-(--color-dark-border) transition-colors"><h3 class="text-sm font-medium line-clamp-2 mb-2">Kubernetes 1.35 신규 기능 총정리</h3><div class="flex flex-wrap gap-1"><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">kubernetes</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">cloud-native</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">container</span></div></a></div></section> <!-- giscus: GitHub Discussions 기반 댓글 --><section class="mt-12 pt-8 border-t border-(--color-border) dark:border-(--color-dark-border)"> <div id="giscus-container"></div> </section> <script>
+  function loadGiscus() {
+    const container = document.getElementById('giscus-container');
+    if (!container || container.querySelector('script')) return;
+
+    const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+    const script = document.createElement('script');
+    script.src = 'https://giscus.app/client.js';
+    script.setAttribute('data-repo', 'neocode24/portfolio');
+    script.setAttribute('data-repo-id', 'R_kgDOQPCcTQ');
+    script.setAttribute('data-category', 'Announcements');
+    script.setAttribute('data-category-id', 'DIC_kwDOQPCcTc4C3hLE');
+    script.setAttribute('data-mapping', 'pathname');
+    script.setAttribute('data-strict', '0');
+    script.setAttribute('data-reactions-enabled', '1');
+    script.setAttribute('data-emit-metadata', '0');
+    script.setAttribute('data-input-position', 'top');
+    script.setAttribute('data-theme', theme);
+    script.setAttribute('data-lang', 'ko');
+    script.crossOrigin = 'anonymous';
+    script.async = true;
+    container.appendChild(script);
+  }
+
+  loadGiscus();
+
+  // 테마 토글 시 giscus iframe에도 반영
+  const toggle = document.getElementById('theme-toggle');
+  if (toggle) {
+    toggle.addEventListener('click', () => {
+      const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      const iframe = document.querySelector('iframe.giscus-frame');
+      if (iframe) {
+        iframe.contentWindow.postMessage(
+          { giscus: { setConfig: { theme } } },
+          'https://giscus.app'
+        );
+      }
+    });
+  }
+</script> </div> <aside class="hidden lg:block"> <div class="sticky top-20 space-y-8"> <nav class="toc" aria-label="목차"><h2 class="text-sm font-semibold mb-3 text-(--color-text) dark:text-(--color-dark-text)">
+목차
+</h2><ul class="space-y-1.5 text-sm"><li><a href="#배경" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="배경">배경</a></li><li><a href="#3계층-코드-구조-확립" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="3계층-코드-구조-확립">3계층 코드 구조 확립</a></li><li><a href="#add-telegram-skill-개선" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="add-telegram-skill-개선">add-telegram Skill 개선</a></li><li class="pl-3"><a href="#철학적-판단-webhook은-fork-custom" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="철학적-판단-webhook은-fork-custom">철학적 판단: Webhook은 Fork Custom</a></li><li><a href="#fork-custom-전체-목록" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="fork-custom-전체-목록">Fork Custom 전체 목록</a></li><li><a href="#사내-vpnztna-인증서-자동-주입-fork-custom" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="사내-vpnztna-인증서-자동-주입-fork-custom">사내 VPN(ZTNA) 인증서 자동 주입 (Fork Custom)</a></li><li class="pl-3"><a href="#호스트-프로세스" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="호스트-프로세스">호스트 프로세스</a></li><li class="pl-3"><a href="#컨테이너-에이전트" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="컨테이너-에이전트">컨테이너 에이전트</a></li><li><a href="#upstream-pr-정리" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="upstream-pr-정리">Upstream PR 정리</a></li><li class="pl-3"><a href="#upstream-pr-규칙-private-전환-후" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="upstream-pr-규칙-private-전환-후">Upstream PR 규칙 (private 전환 후)</a></li><li><a href="#브랜치-정리" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="브랜치-정리">브랜치 정리</a></li><li><a href="#upstream-동기화" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="upstream-동기화">Upstream 동기화</a></li><li><a href="#개발환경-개선" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="개발환경-개선">개발환경 개선</a></li><li class="pl-3"><a href="#git-hooks--formatter-설정" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="git-hooks--formatter-설정">Git Hooks &amp; Formatter 설정</a></li><li class="pl-3"><a href="#node-22-vs-25-이슈" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="node-22-vs-25-이슈">Node 22 vs 25 이슈</a></li><li><a href="#최종-상태" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="최종-상태">최종 상태</a></li></ul></nav><script type="module">function o(){const n=document.querySelectorAll(".toc-link");if(n.length===0)return;const r=Array.from(n).map(e=>e.dataset.slug).map(e=>document.getElementById(e)).filter(Boolean);if(r.length===0)return;let s="";const a=new IntersectionObserver(e=>{for(const t of e)if(t.isIntersecting){s=t.target.id;break}n.forEach(t=>{t.classList.toggle("active",t.dataset.slug===s)})},{rootMargin:"-80px 0px -70% 0px",threshold:0});r.forEach(e=>a.observe(e))}o();document.addEventListener("astro:after-swap",o);</script> <section><h2 class="text-sm font-semibold mb-3 text-(--color-text) dark:text-(--color-dark-text)">
+최근 글
+</h2><ul class="space-y-2 text-sm"><li><a href="/blog/kubernetes-1-35-new-features" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">Kubernetes 1.35 신규 기능 총정리</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li><li><a href="/blog/ai-portal-cicd-pipeline" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">모노레포 CI/CD 실전 구성 — PR Preview부터 자동 정리까지</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li><li><a href="/blog/nanoclaw-architecture" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">Telegram 메시지 하나가 AI 에이전트가 되기까지 — NanoClaw 아키텍처 해부</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li><li><a href="/blog/litellm-ai-gateway" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">LiteLLM으로 LLM API 통합하기 — 개인 인프라에서 엔터프라이즈까지</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li><li><a href="/blog/kubernetes-ipvs-deprecated-nftables" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">kube-proxy IPVS가 Deprecated된 진짜 이유 — nftables 전환 가이드</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li></ul></section> <section><h2 class="text-sm font-semibold mb-3 text-(--color-text) dark:text-(--color-dark-text)">
+태그
+</h2><div class="flex flex-wrap gap-1.5"><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="7개 글">kubernetes</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="7개 글">devops</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="4개 글">ai</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">container</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">claude</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">architecture</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">telegram</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">cloudflare</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">cloud-native</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">cicd</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">gitops</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">github-actions</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">docker</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">llm</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">gateway</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">openai</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">networking</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">nftables</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">kube-proxy</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">ebpf</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">blog</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">astro</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">github-pages</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">automation</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">pod</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">resource-management</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">oci</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">volume</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">litellm</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">infrastructure</span></div></section> </div> </aside> </div> <script type="module">function o(){document.querySelectorAll(".prose pre[data-language]").forEach(e=>{if(e.querySelector(".code-header"))return;const c=e.getAttribute("data-language")||"",t=document.createElement("div");t.className="code-header",t.innerHTML=`<span class="code-lang">${c}</span><span class="code-copy" role="button" aria-label="코드 복사">복사</span>`,e.insertBefore(t,e.firstChild),t.querySelector(".code-copy").addEventListener("click",async()=>{const n=e.querySelector("code");if(!n)return;const r=n.innerText.replace(/^\d+\n?/gm,"");await navigator.clipboard.writeText(r);const a=t.querySelector(".code-copy");a.textContent="완료",setTimeout(()=>{a.textContent="복사"},1500)})})}o();document.addEventListener("astro:after-swap",o);</script> <script type="module" src="/_astro/BlogPost.astro_astro_type_script_index_1_lang.DzPawRLx.js"></script>  </main> <footer class="w-full border-t border-(--color-border) dark:border-(--color-dark-border) transition-colors duration-200"> <div class="max-w-3xl mx-auto px-4 py-6 flex items-center justify-between text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> <span>&copy; 2026 neocode24</span> <a href="https://github.com/neocode24" target="_blank" rel="noopener noreferrer" class="hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors" aria-label="GitHub"> <!-- Lucide: Github --> <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"> <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path> <path d="M9 18c-4.51 2-5-2-7-2"></path> </svg> </a> </div> </footer> </body></html>

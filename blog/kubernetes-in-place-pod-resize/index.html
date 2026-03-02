@@ -1,0 +1,251 @@
+<!DOCTYPE html><html lang="ko"> <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="description" content="Kubernetes 1.35에서 GA가 된 In-Place Pod Resize. Pod을 죽이지 않고 리소스를 동적으로 변경하는 원리, 실전 활용법, 주의사항을 정리합니다."><meta name="google-site-verification" content="FXHFdkKOeWrTnGu9UVF3KjQJ34VlGuYI441eQIir-Es"><meta name="naver-site-verification" content="275f1bc1ba9e44472d530476a8c2373dda3e501a"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="canonical" href="https://blog.neocode24.com/blog/kubernetes-in-place-pod-resize/"><link rel="sitemap" href="/sitemap-index.xml"><link rel="alternate" type="application/rss+xml" title="neocode24" href="/rss.xml"><!-- Open Graph --><meta property="og:type" content="website"><meta property="og:url" content="https://blog.neocode24.com/blog/kubernetes-in-place-pod-resize/"><meta property="og:title" content="Pod 재시작 없이 CPU/메모리를 바꾼다 — Kubernetes In-Place Pod Resize | neocode24"><meta property="og:description" content="Kubernetes 1.35에서 GA가 된 In-Place Pod Resize. Pod을 죽이지 않고 리소스를 동적으로 변경하는 원리, 실전 활용법, 주의사항을 정리합니다."><meta property="og:image" content="https://blog.neocode24.com/images/hero-handshake.png"><meta property="og:locale" content="ko_KR"><meta property="og:site_name" content="neocode24"><!-- Twitter --><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="Pod 재시작 없이 CPU/메모리를 바꾼다 — Kubernetes In-Place Pod Resize | neocode24"><meta name="twitter:description" content="Kubernetes 1.35에서 GA가 된 In-Place Pod Resize. Pod을 죽이지 않고 리소스를 동적으로 변경하는 원리, 실전 활용법, 주의사항을 정리합니다."><meta name="twitter:image" content="https://blog.neocode24.com/images/hero-handshake.png"><title>Pod 재시작 없이 CPU/메모리를 바꾼다 — Kubernetes In-Place Pod Resize | neocode24</title><script>
+      const theme = localStorage.getItem('theme') ||
+        (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+    </script><link rel="stylesheet" href="/_astro/_slug_.raLWOr79.css"></head> <body class="min-h-screen flex flex-col bg-(--color-bg) text-(--color-text) dark:bg-(--color-dark-bg) dark:text-(--color-dark-text) transition-colors duration-200"> <header class="sticky top-0 z-50 w-full border-b border-(--color-border) dark:border-(--color-dark-border) bg-(--color-bg)/95 dark:bg-(--color-dark-bg)/95 backdrop-blur-sm transition-colors duration-200"> <nav class="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between"> <a href="/" class="text-lg font-bold text-(--color-text) dark:text-(--color-dark-text) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors">
+neocode24
+</a> <div class="flex items-center gap-4"> <a href="/blog" class="text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors"> Blog </a><a href="/about" class="text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors"> About </a> <!-- Lucide Sun/Moon 아이콘으로 다크모드 토글 --><button id="theme-toggle" type="button" class="p-1.5 rounded-md hover:bg-(--color-bg-secondary) dark:hover:bg-(--color-dark-bg-secondary) transition-colors" aria-label="테마 전환"> <!-- Sun (라이트 모드에서 보임) --> <svg id="icon-sun" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden dark:block text-(--color-dark-text-secondary)"> <circle cx="12" cy="12" r="4"></circle> <path d="M12 2v2"></path> <path d="M12 20v2"></path> <path d="m4.93 4.93 1.41 1.41"></path> <path d="m17.66 17.66 1.41 1.41"></path> <path d="M2 12h2"></path> <path d="M20 12h2"></path> <path d="m6.34 17.66-1.41 1.41"></path> <path d="m19.07 4.93-1.41 1.41"></path> </svg> <!-- Moon (다크 모드에서 보임) --> <svg id="icon-moon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="block dark:hidden text-(--color-text-secondary)"> <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path> </svg> </button> <script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  });
+</script> </div> </nav> </header> <main class="flex-1 w-full mx-auto px-4 py-8 max-w-6xl">   <script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"Pod 재시작 없이 CPU/메모리를 바꾼다 — Kubernetes In-Place Pod Resize","description":"Kubernetes 1.35에서 GA가 된 In-Place Pod Resize. Pod을 죽이지 않고 리소스를 동적으로 변경하는 원리, 실전 활용법, 주의사항을 정리합니다.","datePublished":"2026-03-02T00:00:00.000Z","author":{"@type":"Person","name":"neocode24","url":"https://github.com/neocode24"},"publisher":{"@type":"Person","name":"neocode24"},"keywords":"kubernetes, pod, resource-management, devops"}</script> <div class="lg:grid lg:grid-cols-[1fr_14rem] lg:gap-8"> <div class="min-w-0"> <article> <header class="mb-8 border-b border-(--color-border) dark:border-(--color-dark-border) pb-6"> <h1 class="text-3xl font-bold mb-3">Pod 재시작 없이 CPU/메모리를 바꾼다 — Kubernetes In-Place Pod Resize</h1> <div class="flex items-center gap-3 text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> <time datetime="2026-03-02T00:00:00.000Z"> 2026년 3월 2일 </time>  <span>&middot; 9분 읽기</span> </div> <div class="flex flex-wrap gap-2 mt-3"> <span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> kubernetes </span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> pod </span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> resource-management </span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> devops </span> </div> </header> <div class="prose dark:prose-invert">  <p>Kubernetes에서 Pod의 CPU/메모리를 변경하려면 어떻게 해야 할까? 지금까지는 답이 하나였다. <strong>Pod을 죽이고 다시 만든다.</strong></p>
+<p>Deployment의 resource를 변경하면 Rolling Update가 일어나고, 기존 Pod이 종료되고, 새 Pod이 생성된다. Stateless한 웹 서버라면 문제없다. 하지만 PostgreSQL을 재시작하면? 진행 중인 배치 작업이 있다면? 연결 중인 수천 개의 WebSocket 세션이 있다면?</p>
+<p>Kubernetes 1.35에서 <strong>In-Place Pod Resize</strong>가 GA(Stable)로 승격되었다. Pod을 죽이지 않고, 실행 중인 컨테이너의 CPU와 메모리를 동적으로 변경할 수 있다.</p>
+<h2 id="7년-걸린-기능">7년 걸린 기능</h2>
+<p>KEP-1287이 처음 제안된 것은 2019년이다. 그로부터 7년:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>버전</th><th>단계</th><th>시기</th></tr></thead><tbody><tr><td>v1.27</td><td>Alpha</td><td>2023</td></tr><tr><td>v1.33</td><td>Beta</td><td>2025</td></tr><tr><td><strong>v1.35</strong></td><td><strong>GA (Stable)</strong></td><td><strong>2026</strong></td></tr></tbody></table>
+<p>왜 이렇게 오래 걸렸을까? Pod의 리소스는 Kubernetes 설계 초기부터 **불변(immutable)**으로 정의되었다. 이걸 mutable로 바꾸는 것은 API Server, Kubelet, Container Runtime, Scheduler 모두에 영향을 미치는 근본적인 변화였기 때문이다.</p>
+<h2 id="왜-필요했는가">왜 필요했는가</h2>
+<p>리소스가 불변이면 생기는 문제들:</p>
+<ul>
+<li><strong>DB 재시작 = 다운타임</strong>: PostgreSQL, MySQL 같은 Stateful 서비스는 Pod 재시작이 곧 서비스 중단</li>
+<li><strong>배치 작업 손실</strong>: 3시간째 돌고 있는 ML 학습 Job의 메모리를 늘리려면 처음부터 다시 시작</li>
+<li><strong>Java 앱의 비효율</strong>: JVM warm-up 시 CPU 2코어가 필요하지만, 안정화 후에는 0.5코어면 충분. 그런데 바꿀 수 없으니 2코어를 계속 점유</li>
+<li><strong>사이드카 튜닝 불가</strong>: Envoy 프록시의 트래픽이 급증해도 메인 앱 전체를 재시작해야 사이드카 리소스를 변경 가능</li>
+</ul>
+<p>이 모든 상황에서 “리소스만 바꾸고 싶은데 Pod을 죽여야 한다”는 것이 문제였다.</p>
+<h2 id="어떻게-동작하는가">어떻게 동작하는가</h2>
+<p>내부 동작을 단계별로 보면:</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>[사용자]</span></span>
+<span class="line"><span>  │</span></span>
+<span class="line"><span>  ├─ kubectl patch pod --subresource resize</span></span>
+<span class="line"><span>  │  (원하는 리소스 변경)</span></span>
+<span class="line"><span>  ▼</span></span>
+<span class="line"><span>[API Server]</span></span>
+<span class="line"><span>  │</span></span>
+<span class="line"><span>  ├─ desired resources를 spec에 기록</span></span>
+<span class="line"><span>  ▼</span></span>
+<span class="line"><span>[Kubelet]</span></span>
+<span class="line"><span>  │</span></span>
+<span class="line"><span>  ├─ 1. Feasibility Check</span></span>
+<span class="line"><span>  │    "이 노드에 여유가 있는가?"</span></span>
+<span class="line"><span>  │    ├─ Yes → 진행</span></span>
+<span class="line"><span>  │    └─ No  → PodResizePending</span></span>
+<span class="line"><span>  │</span></span>
+<span class="line"><span>  ├─ 2. CRI UpdateContainerResources 호출</span></span>
+<span class="line"><span>  ▼</span></span>
+<span class="line"><span>[Container Runtime (containerd/CRI-O)]</span></span>
+<span class="line"><span>  │</span></span>
+<span class="line"><span>  ├─ 3. cgroup 설정 변경</span></span>
+<span class="line"><span>  │    ├─ CPU: cpu.max, cpu.weight 조정</span></span>
+<span class="line"><span>  │    └─ Memory: memory.max, memory.low 조정</span></span>
+<span class="line"><span>  │</span></span>
+<span class="line"><span>  └─ 4. 컨테이너 재시작 없이 즉시 적용</span></span></code></pre>
+<p>핵심은 <strong>cgroup</strong>이다. 리눅스 커널의 cgroup은 프로세스의 리소스 사용량을 제한하는 메커니즘인데, 이 값을 런타임에 바꿀 수 있다. 프로세스를 죽일 필요 없이 “너 이제부터 메모리 2GB까지만 써”라고 제한을 변경하는 것이다.</p>
+<h3 id="상태-확인">상태 확인</h3>
+<p>변경 후 실제 적용된 리소스는 <code>status</code>에서 확인한다:</p>
+<ul>
+<li><code>spec.containers[*].resources</code> → 원하는(desired) 리소스</li>
+<li><code>status.containerStatuses[*].resources</code> → 실제 적용된 리소스</li>
+</ul>
+<p>두 값이 같으면 resize가 완료된 것이고, 다르면 아직 진행 중이거나 대기 상태다.</p>
+<h3 id="resize-상태-조건">Resize 상태 조건</h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Condition</th><th>의미</th></tr></thead><tbody><tr><td><strong>PodResizeInProgress</strong></td><td>resize가 수락되어 적용 중</td></tr><tr><td><strong>PodResizePending</strong> (Deferred)</td><td>노드에 일시적으로 여유 없음, 나중에 재시도</td></tr><tr><td><strong>PodResizePending</strong> (Infeasible)</td><td>해당 노드에서는 불가능 (노드 이동 필요)</td></tr></tbody></table>
+<h2 id="실전-사용법">실전 사용법</h2>
+<h3 id="pod-정의에-resizepolicy-추가">Pod 정의에 resizePolicy 추가</h3>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">apiVersion</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">v1</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">kind</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">Pod</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">metadata</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">  name</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">resize-demo</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">spec</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">  containers</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="color:#22863A;--shiki-dark:#85E89D">name</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">app</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">    image</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">nginx</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">    resources</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">      requests</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">        cpu</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">"100m"</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">        memory</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">"128Mi"</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">      limits</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">        cpu</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">"200m"</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">        memory</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">"256Mi"</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">    resizePolicy</span><span style="color:#24292E;--shiki-dark:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    - </span><span style="color:#22863A;--shiki-dark:#85E89D">resourceName</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">cpu</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">      restartPolicy</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">NotRequired</span><span style="color:#6A737D;--shiki-dark:#6A737D">      # CPU 변경 시 재시작 안 함</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    - </span><span style="color:#22863A;--shiki-dark:#85E89D">resourceName</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">memory</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">      restartPolicy</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">NotRequired</span><span style="color:#6A737D;--shiki-dark:#6A737D">      # 메모리 변경 시도 재시작 안 함</span></span></code></pre>
+<p><code>resizePolicy</code>는 리소스별로 재시작 여부를 제어한다:</p>
+<ul>
+<li><code>NotRequired</code>: 컨테이너 재시작 없이 변경 (기본값)</li>
+<li><code>RestartContainer</code>: 변경 시 컨테이너를 재시작</li>
+</ul>
+<p>메모리를 <code>RestartContainer</code>로 설정하는 경우도 있다. 일부 애플리케이션은 시작 시 할당된 메모리 크기를 기준으로 내부 버퍼를 잡는데, 런타임에 메모리가 늘어나도 그 버퍼 크기는 바뀌지 않기 때문이다 (JVM의 <code>-Xmx</code> 같은 경우).</p>
+<h3 id="cpu메모리-동시-변경">CPU/메모리 동시 변경</h3>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6F42C1;--shiki-dark:#B392F0">kubectl</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> patch</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> pod</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> resize-demo</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> --subresource</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> resize</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> \</span></span>
+<span class="line"><span style="color:#005CC5;--shiki-dark:#79B8FF">  --patch</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> '{"spec":{"containers":[{"name":"app",</span></span>
+<span class="line"><span style="color:#032F62;--shiki-dark:#9ECBFF">    "resources":{</span></span>
+<span class="line"><span style="color:#032F62;--shiki-dark:#9ECBFF">      "requests":{"cpu":"200m","memory":"256Mi"},</span></span>
+<span class="line"><span style="color:#032F62;--shiki-dark:#9ECBFF">      "limits":{"cpu":"500m","memory":"512Mi"}</span></span>
+<span class="line"><span style="color:#032F62;--shiki-dark:#9ECBFF">    }}]}}'</span></span></code></pre>
+<h3 id="cpu만-증가">CPU만 증가</h3>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6F42C1;--shiki-dark:#B392F0">kubectl</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> patch</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> pod</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> resize-demo</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> --subresource</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> resize</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> \</span></span>
+<span class="line"><span style="color:#005CC5;--shiki-dark:#79B8FF">  --patch</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> '{"spec":{"containers":[{"name":"app",</span></span>
+<span class="line"><span style="color:#032F62;--shiki-dark:#9ECBFF">    "resources":{"limits":{"cpu":"800m"}}}]}}'</span></span></code></pre>
+<h3 id="결과-확인">결과 확인</h3>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6A737D;--shiki-dark:#6A737D"># 실제 적용된 리소스</span></span>
+<span class="line"><span style="color:#6F42C1;--shiki-dark:#B392F0">kubectl</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> get</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> pod</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> resize-demo</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> \</span></span>
+<span class="line"><span style="color:#005CC5;--shiki-dark:#79B8FF">  -o</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> jsonpath='{.status.containerStatuses[0].resources}'</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D;--shiki-dark:#6A737D"># 재시작 없이 적용되었는지 (restartCount = 0이면 성공)</span></span>
+<span class="line"><span style="color:#6F42C1;--shiki-dark:#B392F0">kubectl</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> get</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> pod</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> resize-demo</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> \</span></span>
+<span class="line"><span style="color:#005CC5;--shiki-dark:#79B8FF">  -o</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> jsonpath='{.status.containerStatuses[0].restartCount}'</span></span></code></pre>
+<h2 id="실전-활용-시나리오">실전 활용 시나리오</h2>
+<h3 id="1-java-앱-시작-최적화">1. Java 앱 시작 최적화</h3>
+<p>JVM 기반 애플리케이션은 시작할 때 CPU를 많이 쓴다. 클래스 로딩, JIT 컴파일, warm-up 과정에서 CPU 2코어가 필요하지만, 안정화 후에는 500m이면 충분하다.</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>시작: CPU 2000m (JVM warm-up)</span></span>
+<span class="line"><span>  ↓ 안정화 후 resize</span></span>
+<span class="line"><span>운영: CPU 500m</span></span>
+<span class="line"><span>  → 75% CPU 비용 절감</span></span></code></pre>
+<h3 id="2-db-임시-리소스-증가">2. DB 임시 리소스 증가</h3>
+<p>PostgreSQL에서 대용량 리포트를 생성해야 한다. 평소에는 메모리 1Gi면 충분하지만, 리포트 처리에 4Gi가 필요하다.</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>평소: 메모리 1Gi</span></span>
+<span class="line"><span>  ↓ 리포트 시작 전 resize</span></span>
+<span class="line"><span>처리: 메모리 4Gi</span></span>
+<span class="line"><span>  ↓ 리포트 완료 후 resize</span></span>
+<span class="line"><span>복원: 메모리 1Gi</span></span>
+<span class="line"><span>  → 재시작 없이, 다운타임 없이 처리</span></span></code></pre>
+<h3 id="3-service-mesh-사이드카-독립-튜닝">3. Service Mesh 사이드카 독립 튜닝</h3>
+<p>Envoy 사이드카의 트래픽이 급증했다. 메인 앱과 무관한 사이드카만 리소스를 올리고 싶다.</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>Envoy 사이드카: CPU 100m → 500m</span></span>
+<span class="line"><span>  → 메인 앱 재시작 없이 사이드카만 조정</span></span></code></pre>
+<h3 id="4-vpa-자동-연동-미래">4. VPA 자동 연동 (미래)</h3>
+<p>Vertical Pod Autoscaler가 <code>InPlaceOrRecreate</code> 모드를 지원하기 시작했다 (v1.33 beta). 가능하면 in-place resize를 시도하고, 불가능할 때만 Pod을 재생성한다. 완전 자동화된 수직 스케일링이 현실이 되고 있다.</p>
+<h2 id="v135-ga에서-달라진-것">v1.35 GA에서 달라진 것</h2>
+<p>이전 Beta 버전 대비 주목할 변화:</p>
+<ul>
+<li><strong>메모리 감소 허용</strong>: Beta에서는 메모리 limit을 줄일 수 없었다. GA에서는 현재 사용량이 새 limit보다 낮을 때 감소 가능. OOM-kill을 방지하기 위해 best-effort로 동작한다</li>
+<li><strong>우선순위 기반 처리</strong>: 노드에 여유가 부족할 때, 오래된 resize 요청부터 우선 처리</li>
+<li><strong>관측성 강화</strong>: Kubelet 메트릭과 Pod 이벤트로 resize 과정을 추적 가능</li>
+</ul>
+<h2 id="알아둬야-할-제약사항">알아둬야 할 제약사항</h2>
+<p>만능은 아니다. 쓰기 전에 이것들을 확인해야 한다:</p>
+<ol>
+<li><strong>QoS 클래스 변경 불가</strong>: Guaranteed에서 Burstable로 바뀌는 resize는 거부된다. requests와 limits의 관계가 기존 QoS를 유지해야 한다</li>
+<li><strong>Static CPU/Memory Manager 비호환</strong>: 노드에 static CPU Manager가 설정되어 있으면 resize가 Infeasible로 거부된다</li>
+<li><strong>Swap 비호환</strong>: 스왑이 활성화된 환경에서는 사용 불가</li>
+<li><strong>CPU/메모리만</strong>: GPU 등 다른 리소스 타입은 여전히 불변</li>
+<li><strong>런타임 요구사항</strong>: containerd 1.6.9+ 또는 CRI-O 필요</li>
+</ol>
+<h2 id="kubelet-재시작-시-안전한가">Kubelet 재시작 시 안전한가?</h2>
+<p>안전하다. Kubelet은 체크포인트 파일(<code>allocated_pods_state</code>, <code>actuated_pods_state</code>)에 상태를 기록한다. Kubelet이 재시작되면:</p>
+<ol>
+<li>체크포인트에서 상태 복원</li>
+<li>기존 Pod은 현재 할당된 리소스 기준으로 재승인</li>
+<li>대기 중인 resize는 기존 Pod 처리 후 순서대로 진행</li>
+</ol>
+<p>resize 도중에 Kubelet이 죽어도 데이터가 유실되지 않는다.</p>
+<h2 id="정리">정리</h2>
+<p>In-Place Pod Resize는 “Pod의 리소스는 불변”이라는 Kubernetes의 오래된 제약을 깨뜨린 기능이다. 7년의 개발 끝에 GA가 되었고, DB 운영, 배치 처리, 사이드카 관리, 비용 최적화 등 실전에서 필요했던 시나리오들을 비로소 해결한다.</p>
+<p>VPA의 InPlaceOrRecreate 모드와 결합하면, “사람이 리소스를 수동으로 조정”하는 시대가 끝나고 <strong>완전 자동화된 수직 스케일링</strong>의 시대가 시작될 것이다.</p>  </div> </article> <section class="mt-12 pt-8 border-t border-(--color-border) dark:border-(--color-dark-border)"><h2 class="text-lg font-semibold mb-4">관련 글</h2><div class="grid grid-cols-1 sm:grid-cols-3 gap-4"><a href="/blog/kubernetes-1-35-new-features/" class="block rounded-lg bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) p-4 hover:bg-(--color-border) dark:hover:bg-(--color-dark-border) transition-colors"><h3 class="text-sm font-medium line-clamp-2 mb-2">Kubernetes 1.35 신규 기능 총정리</h3><div class="flex flex-wrap gap-1"><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">kubernetes</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">cloud-native</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">container</span></div></a><a href="/blog/ai-portal-cicd-pipeline/" class="block rounded-lg bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) p-4 hover:bg-(--color-border) dark:hover:bg-(--color-dark-border) transition-colors"><h3 class="text-sm font-medium line-clamp-2 mb-2">모노레포 CI/CD 실전 구성 — PR Preview부터 자동 정리까지</h3><div class="flex flex-wrap gap-1"><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">devops</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">cicd</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">kubernetes</span></div></a><a href="/blog/litellm-ai-gateway/" class="block rounded-lg bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) p-4 hover:bg-(--color-border) dark:hover:bg-(--color-dark-border) transition-colors"><h3 class="text-sm font-medium line-clamp-2 mb-2">LiteLLM으로 LLM API 통합하기 — 개인 인프라에서 엔터프라이즈까지</h3><div class="flex flex-wrap gap-1"><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">ai</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">llm</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">gateway</span></div></a></div></section> <!-- giscus: GitHub Discussions 기반 댓글 --><section class="mt-12 pt-8 border-t border-(--color-border) dark:border-(--color-dark-border)"> <div id="giscus-container"></div> </section> <script>
+  function loadGiscus() {
+    const container = document.getElementById('giscus-container');
+    if (!container || container.querySelector('script')) return;
+
+    const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+    const script = document.createElement('script');
+    script.src = 'https://giscus.app/client.js';
+    script.setAttribute('data-repo', 'neocode24/portfolio');
+    script.setAttribute('data-repo-id', 'R_kgDOQPCcTQ');
+    script.setAttribute('data-category', 'Announcements');
+    script.setAttribute('data-category-id', 'DIC_kwDOQPCcTc4C3hLE');
+    script.setAttribute('data-mapping', 'pathname');
+    script.setAttribute('data-strict', '0');
+    script.setAttribute('data-reactions-enabled', '1');
+    script.setAttribute('data-emit-metadata', '0');
+    script.setAttribute('data-input-position', 'top');
+    script.setAttribute('data-theme', theme);
+    script.setAttribute('data-lang', 'ko');
+    script.crossOrigin = 'anonymous';
+    script.async = true;
+    container.appendChild(script);
+  }
+
+  loadGiscus();
+
+  // 테마 토글 시 giscus iframe에도 반영
+  const toggle = document.getElementById('theme-toggle');
+  if (toggle) {
+    toggle.addEventListener('click', () => {
+      const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      const iframe = document.querySelector('iframe.giscus-frame');
+      if (iframe) {
+        iframe.contentWindow.postMessage(
+          { giscus: { setConfig: { theme } } },
+          'https://giscus.app'
+        );
+      }
+    });
+  }
+</script> </div> <aside class="hidden lg:block"> <div class="sticky top-20 space-y-8"> <nav class="toc" aria-label="목차"><h2 class="text-sm font-semibold mb-3 text-(--color-text) dark:text-(--color-dark-text)">
+목차
+</h2><ul class="space-y-1.5 text-sm"><li><a href="#7년-걸린-기능" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="7년-걸린-기능">7년 걸린 기능</a></li><li><a href="#왜-필요했는가" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="왜-필요했는가">왜 필요했는가</a></li><li><a href="#어떻게-동작하는가" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="어떻게-동작하는가">어떻게 동작하는가</a></li><li class="pl-3"><a href="#상태-확인" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="상태-확인">상태 확인</a></li><li class="pl-3"><a href="#resize-상태-조건" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="resize-상태-조건">Resize 상태 조건</a></li><li><a href="#실전-사용법" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="실전-사용법">실전 사용법</a></li><li class="pl-3"><a href="#pod-정의에-resizepolicy-추가" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="pod-정의에-resizepolicy-추가">Pod 정의에 resizePolicy 추가</a></li><li class="pl-3"><a href="#cpu메모리-동시-변경" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="cpu메모리-동시-변경">CPU/메모리 동시 변경</a></li><li class="pl-3"><a href="#cpu만-증가" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="cpu만-증가">CPU만 증가</a></li><li class="pl-3"><a href="#결과-확인" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="결과-확인">결과 확인</a></li><li><a href="#실전-활용-시나리오" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="실전-활용-시나리오">실전 활용 시나리오</a></li><li class="pl-3"><a href="#1-java-앱-시작-최적화" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="1-java-앱-시작-최적화">1. Java 앱 시작 최적화</a></li><li class="pl-3"><a href="#2-db-임시-리소스-증가" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="2-db-임시-리소스-증가">2. DB 임시 리소스 증가</a></li><li class="pl-3"><a href="#3-service-mesh-사이드카-독립-튜닝" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="3-service-mesh-사이드카-독립-튜닝">3. Service Mesh 사이드카 독립 튜닝</a></li><li class="pl-3"><a href="#4-vpa-자동-연동-미래" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="4-vpa-자동-연동-미래">4. VPA 자동 연동 (미래)</a></li><li><a href="#v135-ga에서-달라진-것" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="v135-ga에서-달라진-것">v1.35 GA에서 달라진 것</a></li><li><a href="#알아둬야-할-제약사항" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="알아둬야-할-제약사항">알아둬야 할 제약사항</a></li><li><a href="#kubelet-재시작-시-안전한가" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="kubelet-재시작-시-안전한가">Kubelet 재시작 시 안전한가?</a></li><li><a href="#정리" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="정리">정리</a></li></ul></nav><script type="module">function o(){const n=document.querySelectorAll(".toc-link");if(n.length===0)return;const r=Array.from(n).map(e=>e.dataset.slug).map(e=>document.getElementById(e)).filter(Boolean);if(r.length===0)return;let s="";const a=new IntersectionObserver(e=>{for(const t of e)if(t.isIntersecting){s=t.target.id;break}n.forEach(t=>{t.classList.toggle("active",t.dataset.slug===s)})},{rootMargin:"-80px 0px -70% 0px",threshold:0});r.forEach(e=>a.observe(e))}o();document.addEventListener("astro:after-swap",o);</script> <section><h2 class="text-sm font-semibold mb-3 text-(--color-text) dark:text-(--color-dark-text)">
+최근 글
+</h2><ul class="space-y-2 text-sm"><li><a href="/blog/kubernetes-1-35-new-features" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">Kubernetes 1.35 신규 기능 총정리</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li><li><a href="/blog/ai-portal-cicd-pipeline" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">모노레포 CI/CD 실전 구성 — PR Preview부터 자동 정리까지</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li><li><a href="/blog/nanoclaw-architecture" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">Telegram 메시지 하나가 AI 에이전트가 되기까지 — NanoClaw 아키텍처 해부</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li><li><a href="/blog/litellm-ai-gateway" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">LiteLLM으로 LLM API 통합하기 — 개인 인프라에서 엔터프라이즈까지</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li><li><a href="/blog/kubernetes-ipvs-deprecated-nftables" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">kube-proxy IPVS가 Deprecated된 진짜 이유 — nftables 전환 가이드</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li></ul></section> <section><h2 class="text-sm font-semibold mb-3 text-(--color-text) dark:text-(--color-dark-text)">
+태그
+</h2><div class="flex flex-wrap gap-1.5"><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="7개 글">kubernetes</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="7개 글">devops</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="4개 글">ai</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">container</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">claude</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">architecture</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">telegram</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">cloudflare</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">cloud-native</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">cicd</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">gitops</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">github-actions</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">docker</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">llm</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">gateway</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">openai</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">networking</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">nftables</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">kube-proxy</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">ebpf</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">blog</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">astro</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">github-pages</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">automation</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">pod</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">resource-management</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">oci</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">volume</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">litellm</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">infrastructure</span></div></section> </div> </aside> </div> <script type="module">function o(){document.querySelectorAll(".prose pre[data-language]").forEach(e=>{if(e.querySelector(".code-header"))return;const c=e.getAttribute("data-language")||"",t=document.createElement("div");t.className="code-header",t.innerHTML=`<span class="code-lang">${c}</span><span class="code-copy" role="button" aria-label="코드 복사">복사</span>`,e.insertBefore(t,e.firstChild),t.querySelector(".code-copy").addEventListener("click",async()=>{const n=e.querySelector("code");if(!n)return;const r=n.innerText.replace(/^\d+\n?/gm,"");await navigator.clipboard.writeText(r);const a=t.querySelector(".code-copy");a.textContent="완료",setTimeout(()=>{a.textContent="복사"},1500)})})}o();document.addEventListener("astro:after-swap",o);</script> <script type="module" src="/_astro/BlogPost.astro_astro_type_script_index_1_lang.DzPawRLx.js"></script>  </main> <footer class="w-full border-t border-(--color-border) dark:border-(--color-dark-border) transition-colors duration-200"> <div class="max-w-3xl mx-auto px-4 py-6 flex items-center justify-between text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> <span>&copy; 2026 neocode24</span> <a href="https://github.com/neocode24" target="_blank" rel="noopener noreferrer" class="hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors" aria-label="GitHub"> <!-- Lucide: Github --> <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"> <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path> <path d="M9 18c-4.51 2-5-2-7-2"></path> </svg> </a> </div> </footer> </body></html>

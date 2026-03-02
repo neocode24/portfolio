@@ -1,0 +1,297 @@
+<!DOCTYPE html><html lang="ko"> <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="description" content="Claude 구독 만료 대비 LiteLLM Proxy 기반 LLM fallback 인프라를 K3s + Cloudflare Tunnel로 구성한 과정을 정리합니다."><meta name="google-site-verification" content="FXHFdkKOeWrTnGu9UVF3KjQJ34VlGuYI441eQIir-Es"><meta name="naver-site-verification" content="275f1bc1ba9e44472d530476a8c2373dda3e501a"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="canonical" href="https://blog.neocode24.com/blog/litellm-gateway-personal-infra/"><link rel="sitemap" href="/sitemap-index.xml"><link rel="alternate" type="application/rss+xml" title="neocode24" href="/rss.xml"><!-- Open Graph --><meta property="og:type" content="website"><meta property="og:url" content="https://blog.neocode24.com/blog/litellm-gateway-personal-infra/"><meta property="og:title" content="LiteLLM Gateway 개인 인프라 구성 - Claude 대체 Gemini Fallback | neocode24"><meta property="og:description" content="Claude 구독 만료 대비 LiteLLM Proxy 기반 LLM fallback 인프라를 K3s + Cloudflare Tunnel로 구성한 과정을 정리합니다."><meta property="og:image" content="https://blog.neocode24.com/images/hero-handshake.png"><meta property="og:locale" content="ko_KR"><meta property="og:site_name" content="neocode24"><!-- Twitter --><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="LiteLLM Gateway 개인 인프라 구성 - Claude 대체 Gemini Fallback | neocode24"><meta name="twitter:description" content="Claude 구독 만료 대비 LiteLLM Proxy 기반 LLM fallback 인프라를 K3s + Cloudflare Tunnel로 구성한 과정을 정리합니다."><meta name="twitter:image" content="https://blog.neocode24.com/images/hero-handshake.png"><title>LiteLLM Gateway 개인 인프라 구성 - Claude 대체 Gemini Fallback | neocode24</title><script>
+      const theme = localStorage.getItem('theme') ||
+        (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+    </script><link rel="stylesheet" href="/_astro/_slug_.raLWOr79.css"></head> <body class="min-h-screen flex flex-col bg-(--color-bg) text-(--color-text) dark:bg-(--color-dark-bg) dark:text-(--color-dark-text) transition-colors duration-200"> <header class="sticky top-0 z-50 w-full border-b border-(--color-border) dark:border-(--color-dark-border) bg-(--color-bg)/95 dark:bg-(--color-dark-bg)/95 backdrop-blur-sm transition-colors duration-200"> <nav class="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between"> <a href="/" class="text-lg font-bold text-(--color-text) dark:text-(--color-dark-text) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors">
+neocode24
+</a> <div class="flex items-center gap-4"> <a href="/blog" class="text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors"> Blog </a><a href="/about" class="text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors"> About </a> <!-- Lucide Sun/Moon 아이콘으로 다크모드 토글 --><button id="theme-toggle" type="button" class="p-1.5 rounded-md hover:bg-(--color-bg-secondary) dark:hover:bg-(--color-dark-bg-secondary) transition-colors" aria-label="테마 전환"> <!-- Sun (라이트 모드에서 보임) --> <svg id="icon-sun" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden dark:block text-(--color-dark-text-secondary)"> <circle cx="12" cy="12" r="4"></circle> <path d="M12 2v2"></path> <path d="M12 20v2"></path> <path d="m4.93 4.93 1.41 1.41"></path> <path d="m17.66 17.66 1.41 1.41"></path> <path d="M2 12h2"></path> <path d="M20 12h2"></path> <path d="m6.34 17.66-1.41 1.41"></path> <path d="m19.07 4.93-1.41 1.41"></path> </svg> <!-- Moon (다크 모드에서 보임) --> <svg id="icon-moon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="block dark:hidden text-(--color-text-secondary)"> <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path> </svg> </button> <script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  });
+</script> </div> </nav> </header> <main class="flex-1 w-full mx-auto px-4 py-8 max-w-6xl">   <script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"LiteLLM Gateway 개인 인프라 구성 - Claude 대체 Gemini Fallback","description":"Claude 구독 만료 대비 LiteLLM Proxy 기반 LLM fallback 인프라를 K3s + Cloudflare Tunnel로 구성한 과정을 정리합니다.","datePublished":"2026-03-02T00:00:00.000Z","author":{"@type":"Person","name":"neocode24","url":"https://github.com/neocode24"},"publisher":{"@type":"Person","name":"neocode24"},"keywords":"litellm, kubernetes, ai, infrastructure, cloudflare"}</script> <div class="lg:grid lg:grid-cols-[1fr_14rem] lg:gap-8"> <div class="min-w-0"> <article> <header class="mb-8 border-b border-(--color-border) dark:border-(--color-dark-border) pb-6"> <h1 class="text-3xl font-bold mb-3">LiteLLM Gateway 개인 인프라 구성 - Claude 대체 Gemini Fallback</h1> <div class="flex items-center gap-3 text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> <time datetime="2026-03-02T00:00:00.000Z"> 2026년 3월 2일 </time>  <span>&middot; 7분 읽기</span> </div> <div class="flex flex-wrap gap-2 mt-3"> <span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> litellm </span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> kubernetes </span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> ai </span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> infrastructure </span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> cloudflare </span> </div> </header> <div class="prose dark:prose-invert">  <p>Claude 구독 만료 대비 LLM fallback 인프라. NanoClaw 코드 수정 없이 <code>.env</code> 전환만으로 Gemini 기반 운영이 가능하다.</p>
+<h2 id="인프라-구성">인프라 구성</h2>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">flowchart TD</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    subgraph 외부</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        CF[Cloudflare Tunnel&#x3C;br/>llm.neocode24.com]</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        TG[Telegram]</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    end</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    subgraph 맥북</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        subgraph OrbStack K3s</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">            LLM[LiteLLM Proxy&#x3C;br/>:4000]</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">            PG[PostgreSQL 16&#x3C;br/>:5432]</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        end</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        NC[NanoClaw&#x3C;br/>:3030]</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        CFD[cloudflared&#x3C;br/>private tunnel]</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    end</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    subgraph Google</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        GF[Gemini 2.5 Flash]</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        GP[Gemini 2.5 Pro]</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    end</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    TG --> CF --> CFD</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    CFD -->|claw.neocode24.com| NC</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    CFD -->|llm.neocode24.com&#x3C;br/>:30400 NodePort| LLM</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    NC -->|ANTHROPIC_BASE_URL| LLM</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    LLM --> PG</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    LLM --> GF</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    LLM --> GP</span></span></code></pre>
+<h2 id="구성-요소">구성 요소</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>구성 요소</th><th>스펙</th><th>비고</th></tr></thead><tbody><tr><td>LiteLLM Proxy</td><td><code>ghcr.io/berriai/litellm:main-latest</code></td><td>K8s Deployment, 1Gi 메모리</td></tr><tr><td>PostgreSQL</td><td>16-alpine</td><td>사용자/키/로그 저장, PVC 1Gi</td></tr><tr><td>Cloudflare Tunnel</td><td>private tunnel</td><td>claw + llm 2개 ingress</td></tr><tr><td>Gemini API</td><td>AI Studio 무료 티어</td><td>gemini-2.5-flash, gemini-2.5-pro</td></tr></tbody></table>
+<h2 id="모델-매핑">모델 매핑</h2>
+<p>NanoClaw는 Claude 모델명으로 요청하지만, LiteLLM <code>model_group_alias</code>가 Gemini로 라우팅한다.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>요청 모델 (Claude)</th><th>실제 호출 (Gemini)</th></tr></thead><tbody><tr><td>claude-opus-4-6</td><td>gemini-2.5-pro</td></tr><tr><td>claude-sonnet-4-6</td><td>gemini-2.5-flash</td></tr><tr><td>claude-haiku-4-5</td><td>gemini-2.5-flash</td></tr></tbody></table>
+<p>Fallback 체인: flash - pro 상호 대체.</p>
+<h2 id="nanoclaw-전환-방법">NanoClaw 전환 방법</h2>
+<p><code>.env</code> 파일에서 주석만 변경하면 된다.</p>
+<h3 id="claude-모드-기본">Claude 모드 (기본)</h3>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...</span></span>
+<span class="line"><span></span></span>
+<span class="line"><span>#ANTHROPIC_BASE_URL=https://llm.example.com</span></span>
+<span class="line"><span>#ANTHROPIC_AUTH_TOKEN=sk-litellm-...</span></span></code></pre>
+<h3 id="gemini-fallback-모드">Gemini fallback 모드</h3>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>#CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...</span></span>
+<span class="line"><span></span></span>
+<span class="line"><span>ANTHROPIC_BASE_URL=https://llm.example.com</span></span>
+<span class="line"><span>ANTHROPIC_AUTH_TOKEN=sk-litellm-...</span></span></code></pre>
+<p>전환 후 서비스 재시작:</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6F42C1;--shiki-dark:#B392F0">launchctl</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> kickstart</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> -k</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> gui/</span><span style="color:#24292E;--shiki-dark:#E1E4E8">$(</span><span style="color:#6F42C1;--shiki-dark:#B392F0">id</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> -u</span><span style="color:#24292E;--shiki-dark:#E1E4E8">)</span><span style="color:#032F62;--shiki-dark:#9ECBFF">/com.nanoclaw</span></span></code></pre>
+<h2 id="cloudflare-tunnel">Cloudflare Tunnel</h2>
+<p>하나의 터널로 두 서비스를 수용한다.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>hostname</th><th>service</th><th>용도</th></tr></thead><tbody><tr><td>claw.example.com</td><td>localhost:3030</td><td>NanoClaw webhook</td></tr><tr><td>llm.example.com</td><td>localhost:30400</td><td>LiteLLM NodePort</td></tr></tbody></table>
+<h2 id="k8s-배포">K8s 배포</h2>
+<p>namespace: <code>litellm</code></p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6A737D;--shiki-dark:#6A737D"># 리소스 확인</span></span>
+<span class="line"><span style="color:#6F42C1;--shiki-dark:#B392F0">kubectl</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> -n</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> litellm</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> get</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> all</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D;--shiki-dark:#6A737D"># ConfigMap 업데이트 (config.yaml 변경 시)</span></span>
+<span class="line"><span style="color:#6F42C1;--shiki-dark:#B392F0">kubectl</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> -n</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> litellm</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> create</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> configmap</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> litellm-config</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> \</span></span>
+<span class="line"><span style="color:#005CC5;--shiki-dark:#79B8FF">  --from-file=config.yaml=config.yaml</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> \</span></span>
+<span class="line"><span style="color:#005CC5;--shiki-dark:#79B8FF">  --dry-run=client</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> -o</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> yaml</span><span style="color:#D73A49;--shiki-dark:#F97583"> |</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> kubectl</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> apply</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> -f</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> -</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D;--shiki-dark:#6A737D"># 재시작</span></span>
+<span class="line"><span style="color:#6F42C1;--shiki-dark:#B392F0">kubectl</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> -n</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> litellm</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> rollout</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> restart</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> deployment</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> litellm</span></span></code></pre>
+<h2 id="전원-및-sleep-동작">전원 및 Sleep 동작</h2>
+<p>맥북 기반 인프라이므로 전원/sleep 상태에 따라 서비스 가용성이 달라진다.</p>
+<h3 id="macos-전원-설정-pmset">macOS 전원 설정 (pmset)</h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>항목</th><th>배터리</th><th>AC 전원</th></tr></thead><tbody><tr><td>sleep</td><td>1분 후 sleep</td><td><strong>0 (sleep 안 함)</strong></td></tr><tr><td>displaysleep</td><td>5분</td><td>10분</td></tr><tr><td>tcpkeepalive</td><td>1 (유지)</td><td>1 (유지)</td></tr></tbody></table>
+<h3 id="시나리오별-동작">시나리오별 동작</h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>시나리오</th><th>NanoClaw</th><th>스케줄</th><th>cloudflared</th></tr></thead><tbody><tr><td>AC 전원 + 뚜껑 열림</td><td>정상</td><td>정상</td><td>정상</td></tr><tr><td>AC 전원 + 뚜껑 닫힘</td><td>정상 (디스플레이만 off)</td><td>정상</td><td>정상</td></tr><tr><td>배터리 + 뚜껑 닫힘</td><td><strong>중단</strong> (clamshell sleep)</td><td><strong>중단</strong></td><td><strong>중단</strong></td></tr><tr><td>sleep 중 뚜껑 열기 + AC 연결</td><td>복구</td><td>복구</td><td>~1분 후 복구</td></tr></tbody></table>
+<h3 id="핵심-규칙">핵심 규칙</h3>
+<ul>
+<li><code>sleep=0</code>(AC)은 idle sleep 비활성화이며, <strong>clamshell sleep과 무관</strong></li>
+<li>뚜껑 닫으면 <code>sleep</code> 값에 상관없이 즉시 sleep 진입</li>
+<li>clamshell sleep 없이 뚜껑을 닫으려면 AC + 외부 디스플레이 필요</li>
+</ul>
+<h3 id="네트워크-전환-시-복구-동작">네트워크 전환 시 복구 동작</h3>
+<p>IP 변경(WiFi - 테더링 전환) 시 검증 결과:</p>
+<ol>
+<li><strong>cloudflared</strong>: sleep 후 깨어나면 ~1분 내 자동 재연결</li>
+<li><strong>Telegram webhook</strong>: cloudflared 복구 전까지 530/502 에러, 복구 후 pending 메시지 자동 재전송</li>
+<li><strong>NanoClaw 컨테이너</strong>: sleep 중 컨테이너가 kill(code 137)되면 자동 재시도(5초 backoff)로 복구</li>
+<li><strong>스케줄 태스크</strong>: <code>next_run &#x3C;= 현재시간</code> 조건으로 조회하므로, sleep 중 밀린 스케줄도 깨어난 직후 즉시 실행</li>
+</ol>
+<h2 id="사내-vpn-ztna-인증서-처리">사내 VPN (ZTNA) 인증서 처리</h2>
+<p>사내 VPN 연결 시 ZTNA가 모든 HTTPS 트래픽을 MITM하여 자체 CA로 인증서를 재발급한다. Node.js와 Docker 컨테이너는 별도 처리가 필요하다.</p>
+<h3 id="호스트-nanoclaw-프로세스">호스트 (NanoClaw 프로세스)</h3>
+<p>launchd plist에 <code>NODE_EXTRA_CA_CERTS</code> 환경변수 추가:</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="xml"><code><span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">&#x3C;</span><span style="color:#22863A;--shiki-dark:#85E89D">key</span><span style="color:#24292E;--shiki-dark:#E1E4E8">>NODE_EXTRA_CA_CERTS&#x3C;/</span><span style="color:#22863A;--shiki-dark:#85E89D">key</span><span style="color:#24292E;--shiki-dark:#E1E4E8">></span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">&#x3C;</span><span style="color:#22863A;--shiki-dark:#85E89D">string</span><span style="color:#24292E;--shiki-dark:#E1E4E8">>/path/to/corp-proxy-root.crt&#x3C;/</span><span style="color:#22863A;--shiki-dark:#85E89D">string</span><span style="color:#24292E;--shiki-dark:#E1E4E8">></span></span></code></pre>
+<h3 id="컨테이너-claude-agent">컨테이너 (Claude Agent)</h3>
+<p><code>container-runner.ts</code>에서 CA 파일이 존재하면 자동으로 bind mount + 환경변수 설정:</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="typescript"><code><span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">const</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> corpCaPath</span><span style="color:#D73A49;--shiki-dark:#F97583"> =</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> path.</span><span style="color:#6F42C1;--shiki-dark:#B392F0">join</span><span style="color:#24292E;--shiki-dark:#E1E4E8">(os.</span><span style="color:#6F42C1;--shiki-dark:#B392F0">homedir</span><span style="color:#24292E;--shiki-dark:#E1E4E8">(), </span><span style="color:#032F62;--shiki-dark:#9ECBFF">'Self-Signed-Certificate'</span><span style="color:#24292E;--shiki-dark:#E1E4E8">, </span><span style="color:#032F62;--shiki-dark:#9ECBFF">'corp-proxy-root.crt'</span><span style="color:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">if</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> (fs.</span><span style="color:#6F42C1;--shiki-dark:#B392F0">existsSync</span><span style="color:#24292E;--shiki-dark:#E1E4E8">(corpCaPath)) {</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">  args.</span><span style="color:#6F42C1;--shiki-dark:#B392F0">push</span><span style="color:#24292E;--shiki-dark:#E1E4E8">(</span><span style="color:#032F62;--shiki-dark:#9ECBFF">'-v'</span><span style="color:#24292E;--shiki-dark:#E1E4E8">, </span><span style="color:#032F62;--shiki-dark:#9ECBFF">`${</span><span style="color:#24292E;--shiki-dark:#E1E4E8">corpCaPath</span><span style="color:#032F62;--shiki-dark:#9ECBFF">}:/usr/local/share/ca-certificates/corp-proxy-root.crt:ro`</span><span style="color:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">  args.</span><span style="color:#6F42C1;--shiki-dark:#B392F0">push</span><span style="color:#24292E;--shiki-dark:#E1E4E8">(</span><span style="color:#032F62;--shiki-dark:#9ECBFF">'-e'</span><span style="color:#24292E;--shiki-dark:#E1E4E8">, </span><span style="color:#032F62;--shiki-dark:#9ECBFF">'NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/corp-proxy-root.crt'</span><span style="color:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre>
+<ul>
+<li><code>NODE_EXTRA_CA_CERTS</code>는 Node.js 기본 CA 저장소에 <strong>추가</strong> CA를 등록</li>
+<li>SSL 검증 비활성화가 아닌 정당한 CA 추가 방식</li>
+<li>VPN 미사용 시에도 영향 없음 (추가 CA일 뿐)</li>
+<li>CA 파일이 없으면 mount 자체를 건너뜀</li>
+</ul>
+<h2 id="제약-사항">제약 사항</h2>
+<ul>
+<li><strong>VPN-Tunnel 충돌</strong>: 사내 VPN 활성화 시 Cloudflare Tunnel 불가</li>
+<li><strong>Gemini 무료 티어 제한</strong>: rate limit 및 사용량 제한 존재</li>
+<li><strong>도구 호환성</strong>: Claude Agent SDK의 tool use가 Gemini에서 완전히 호환되지 않을 수 있음</li>
+</ul>  </div> </article> <section class="mt-12 pt-8 border-t border-(--color-border) dark:border-(--color-dark-border)"><h2 class="text-lg font-semibold mb-4">관련 글</h2><div class="grid grid-cols-1 sm:grid-cols-3 gap-4"><a href="/blog/litellm-ai-gateway/" class="block rounded-lg bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) p-4 hover:bg-(--color-border) dark:hover:bg-(--color-dark-border) transition-colors"><h3 class="text-sm font-medium line-clamp-2 mb-2">LiteLLM으로 LLM API 통합하기 — 개인 인프라에서 엔터프라이즈까지</h3><div class="flex flex-wrap gap-1"><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">ai</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">llm</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">gateway</span></div></a><a href="/blog/kubernetes-1-35-new-features/" class="block rounded-lg bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) p-4 hover:bg-(--color-border) dark:hover:bg-(--color-dark-border) transition-colors"><h3 class="text-sm font-medium line-clamp-2 mb-2">Kubernetes 1.35 신규 기능 총정리</h3><div class="flex flex-wrap gap-1"><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">kubernetes</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">cloud-native</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">container</span></div></a><a href="/blog/ai-portal-cicd-pipeline/" class="block rounded-lg bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) p-4 hover:bg-(--color-border) dark:hover:bg-(--color-dark-border) transition-colors"><h3 class="text-sm font-medium line-clamp-2 mb-2">모노레포 CI/CD 실전 구성 — PR Preview부터 자동 정리까지</h3><div class="flex flex-wrap gap-1"><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">devops</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">cicd</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">kubernetes</span></div></a></div></section> <!-- giscus: GitHub Discussions 기반 댓글 --><section class="mt-12 pt-8 border-t border-(--color-border) dark:border-(--color-dark-border)"> <div id="giscus-container"></div> </section> <script>
+  function loadGiscus() {
+    const container = document.getElementById('giscus-container');
+    if (!container || container.querySelector('script')) return;
+
+    const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+    const script = document.createElement('script');
+    script.src = 'https://giscus.app/client.js';
+    script.setAttribute('data-repo', 'neocode24/portfolio');
+    script.setAttribute('data-repo-id', 'R_kgDOQPCcTQ');
+    script.setAttribute('data-category', 'Announcements');
+    script.setAttribute('data-category-id', 'DIC_kwDOQPCcTc4C3hLE');
+    script.setAttribute('data-mapping', 'pathname');
+    script.setAttribute('data-strict', '0');
+    script.setAttribute('data-reactions-enabled', '1');
+    script.setAttribute('data-emit-metadata', '0');
+    script.setAttribute('data-input-position', 'top');
+    script.setAttribute('data-theme', theme);
+    script.setAttribute('data-lang', 'ko');
+    script.crossOrigin = 'anonymous';
+    script.async = true;
+    container.appendChild(script);
+  }
+
+  loadGiscus();
+
+  // 테마 토글 시 giscus iframe에도 반영
+  const toggle = document.getElementById('theme-toggle');
+  if (toggle) {
+    toggle.addEventListener('click', () => {
+      const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      const iframe = document.querySelector('iframe.giscus-frame');
+      if (iframe) {
+        iframe.contentWindow.postMessage(
+          { giscus: { setConfig: { theme } } },
+          'https://giscus.app'
+        );
+      }
+    });
+  }
+</script> </div> <aside class="hidden lg:block"> <div class="sticky top-20 space-y-8"> <nav class="toc" aria-label="목차"><h2 class="text-sm font-semibold mb-3 text-(--color-text) dark:text-(--color-dark-text)">
+목차
+</h2><ul class="space-y-1.5 text-sm"><li><a href="#인프라-구성" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="인프라-구성">인프라 구성</a></li><li><a href="#구성-요소" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="구성-요소">구성 요소</a></li><li><a href="#모델-매핑" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="모델-매핑">모델 매핑</a></li><li><a href="#nanoclaw-전환-방법" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="nanoclaw-전환-방법">NanoClaw 전환 방법</a></li><li class="pl-3"><a href="#claude-모드-기본" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="claude-모드-기본">Claude 모드 (기본)</a></li><li class="pl-3"><a href="#gemini-fallback-모드" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="gemini-fallback-모드">Gemini fallback 모드</a></li><li><a href="#cloudflare-tunnel" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="cloudflare-tunnel">Cloudflare Tunnel</a></li><li><a href="#k8s-배포" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="k8s-배포">K8s 배포</a></li><li><a href="#전원-및-sleep-동작" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="전원-및-sleep-동작">전원 및 Sleep 동작</a></li><li class="pl-3"><a href="#macos-전원-설정-pmset" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="macos-전원-설정-pmset">macOS 전원 설정 (pmset)</a></li><li class="pl-3"><a href="#시나리오별-동작" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="시나리오별-동작">시나리오별 동작</a></li><li class="pl-3"><a href="#핵심-규칙" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="핵심-규칙">핵심 규칙</a></li><li class="pl-3"><a href="#네트워크-전환-시-복구-동작" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="네트워크-전환-시-복구-동작">네트워크 전환 시 복구 동작</a></li><li><a href="#사내-vpn-ztna-인증서-처리" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="사내-vpn-ztna-인증서-처리">사내 VPN (ZTNA) 인증서 처리</a></li><li class="pl-3"><a href="#호스트-nanoclaw-프로세스" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="호스트-nanoclaw-프로세스">호스트 (NanoClaw 프로세스)</a></li><li class="pl-3"><a href="#컨테이너-claude-agent" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="컨테이너-claude-agent">컨테이너 (Claude Agent)</a></li><li><a href="#제약-사항" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="제약-사항">제약 사항</a></li></ul></nav><script type="module">function o(){const n=document.querySelectorAll(".toc-link");if(n.length===0)return;const r=Array.from(n).map(e=>e.dataset.slug).map(e=>document.getElementById(e)).filter(Boolean);if(r.length===0)return;let s="";const a=new IntersectionObserver(e=>{for(const t of e)if(t.isIntersecting){s=t.target.id;break}n.forEach(t=>{t.classList.toggle("active",t.dataset.slug===s)})},{rootMargin:"-80px 0px -70% 0px",threshold:0});r.forEach(e=>a.observe(e))}o();document.addEventListener("astro:after-swap",o);</script> <section><h2 class="text-sm font-semibold mb-3 text-(--color-text) dark:text-(--color-dark-text)">
+최근 글
+</h2><ul class="space-y-2 text-sm"><li><a href="/blog/kubernetes-1-35-new-features" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">Kubernetes 1.35 신규 기능 총정리</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li><li><a href="/blog/ai-portal-cicd-pipeline" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">모노레포 CI/CD 실전 구성 — PR Preview부터 자동 정리까지</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li><li><a href="/blog/nanoclaw-architecture" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">Telegram 메시지 하나가 AI 에이전트가 되기까지 — NanoClaw 아키텍처 해부</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li><li><a href="/blog/litellm-ai-gateway" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">LiteLLM으로 LLM API 통합하기 — 개인 인프라에서 엔터프라이즈까지</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li><li><a href="/blog/kubernetes-ipvs-deprecated-nftables" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">kube-proxy IPVS가 Deprecated된 진짜 이유 — nftables 전환 가이드</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li></ul></section> <section><h2 class="text-sm font-semibold mb-3 text-(--color-text) dark:text-(--color-dark-text)">
+태그
+</h2><div class="flex flex-wrap gap-1.5"><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="7개 글">kubernetes</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="7개 글">devops</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="4개 글">ai</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">container</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">claude</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">architecture</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">telegram</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">cloudflare</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">cloud-native</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">cicd</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">gitops</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">github-actions</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">docker</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">llm</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">gateway</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">openai</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">networking</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">nftables</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">kube-proxy</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">ebpf</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">blog</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">astro</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">github-pages</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">automation</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">pod</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">resource-management</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">oci</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">volume</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">litellm</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">infrastructure</span></div></section> </div> </aside> </div> <script type="module">function o(){document.querySelectorAll(".prose pre[data-language]").forEach(e=>{if(e.querySelector(".code-header"))return;const c=e.getAttribute("data-language")||"",t=document.createElement("div");t.className="code-header",t.innerHTML=`<span class="code-lang">${c}</span><span class="code-copy" role="button" aria-label="코드 복사">복사</span>`,e.insertBefore(t,e.firstChild),t.querySelector(".code-copy").addEventListener("click",async()=>{const n=e.querySelector("code");if(!n)return;const r=n.innerText.replace(/^\d+\n?/gm,"");await navigator.clipboard.writeText(r);const a=t.querySelector(".code-copy");a.textContent="완료",setTimeout(()=>{a.textContent="복사"},1500)})})}o();document.addEventListener("astro:after-swap",o);</script> <script type="module" src="/_astro/BlogPost.astro_astro_type_script_index_1_lang.DzPawRLx.js"></script>  </main> <footer class="w-full border-t border-(--color-border) dark:border-(--color-dark-border) transition-colors duration-200"> <div class="max-w-3xl mx-auto px-4 py-6 flex items-center justify-between text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> <span>&copy; 2026 neocode24</span> <a href="https://github.com/neocode24" target="_blank" rel="noopener noreferrer" class="hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors" aria-label="GitHub"> <!-- Lucide: Github --> <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"> <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path> <path d="M9 18c-4.51 2-5-2-7-2"></path> </svg> </a> </div> </footer> </body></html>

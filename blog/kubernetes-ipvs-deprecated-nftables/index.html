@@ -1,0 +1,254 @@
+<!DOCTYPE html><html lang="ko"> <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="description" content="Kubernetes 1.35에서 IPVS 모드가 deprecated되었다. 많은 사람들이 eBPF를 기대했지만, 선택된 것은 nftables였다. 그 배경과 마이그레이션 방법을 정리한다."><meta name="google-site-verification" content="FXHFdkKOeWrTnGu9UVF3KjQJ34VlGuYI441eQIir-Es"><meta name="naver-site-verification" content="275f1bc1ba9e44472d530476a8c2373dda3e501a"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="canonical" href="https://blog.neocode24.com/blog/kubernetes-ipvs-deprecated-nftables/"><link rel="sitemap" href="/sitemap-index.xml"><link rel="alternate" type="application/rss+xml" title="neocode24" href="/rss.xml"><!-- Open Graph --><meta property="og:type" content="website"><meta property="og:url" content="https://blog.neocode24.com/blog/kubernetes-ipvs-deprecated-nftables/"><meta property="og:title" content="kube-proxy IPVS가 Deprecated된 진짜 이유 — nftables 전환 가이드 | neocode24"><meta property="og:description" content="Kubernetes 1.35에서 IPVS 모드가 deprecated되었다. 많은 사람들이 eBPF를 기대했지만, 선택된 것은 nftables였다. 그 배경과 마이그레이션 방법을 정리한다."><meta property="og:image" content="https://blog.neocode24.com/images/hero-handshake.png"><meta property="og:locale" content="ko_KR"><meta property="og:site_name" content="neocode24"><!-- Twitter --><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="kube-proxy IPVS가 Deprecated된 진짜 이유 — nftables 전환 가이드 | neocode24"><meta name="twitter:description" content="Kubernetes 1.35에서 IPVS 모드가 deprecated되었다. 많은 사람들이 eBPF를 기대했지만, 선택된 것은 nftables였다. 그 배경과 마이그레이션 방법을 정리한다."><meta name="twitter:image" content="https://blog.neocode24.com/images/hero-handshake.png"><title>kube-proxy IPVS가 Deprecated된 진짜 이유 — nftables 전환 가이드 | neocode24</title><script>
+      const theme = localStorage.getItem('theme') ||
+        (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+    </script><link rel="stylesheet" href="/_astro/_slug_.raLWOr79.css"></head> <body class="min-h-screen flex flex-col bg-(--color-bg) text-(--color-text) dark:bg-(--color-dark-bg) dark:text-(--color-dark-text) transition-colors duration-200"> <header class="sticky top-0 z-50 w-full border-b border-(--color-border) dark:border-(--color-dark-border) bg-(--color-bg)/95 dark:bg-(--color-dark-bg)/95 backdrop-blur-sm transition-colors duration-200"> <nav class="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between"> <a href="/" class="text-lg font-bold text-(--color-text) dark:text-(--color-dark-text) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors">
+neocode24
+</a> <div class="flex items-center gap-4"> <a href="/blog" class="text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors"> Blog </a><a href="/about" class="text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors"> About </a> <!-- Lucide Sun/Moon 아이콘으로 다크모드 토글 --><button id="theme-toggle" type="button" class="p-1.5 rounded-md hover:bg-(--color-bg-secondary) dark:hover:bg-(--color-dark-bg-secondary) transition-colors" aria-label="테마 전환"> <!-- Sun (라이트 모드에서 보임) --> <svg id="icon-sun" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden dark:block text-(--color-dark-text-secondary)"> <circle cx="12" cy="12" r="4"></circle> <path d="M12 2v2"></path> <path d="M12 20v2"></path> <path d="m4.93 4.93 1.41 1.41"></path> <path d="m17.66 17.66 1.41 1.41"></path> <path d="M2 12h2"></path> <path d="M20 12h2"></path> <path d="m6.34 17.66-1.41 1.41"></path> <path d="m19.07 4.93-1.41 1.41"></path> </svg> <!-- Moon (다크 모드에서 보임) --> <svg id="icon-moon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="block dark:hidden text-(--color-text-secondary)"> <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path> </svg> </button> <script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  });
+</script> </div> </nav> </header> <main class="flex-1 w-full mx-auto px-4 py-8 max-w-6xl">   <script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"kube-proxy IPVS가 Deprecated된 진짜 이유 — nftables 전환 가이드","description":"Kubernetes 1.35에서 IPVS 모드가 deprecated되었다. 많은 사람들이 eBPF를 기대했지만, 선택된 것은 nftables였다. 그 배경과 마이그레이션 방법을 정리한다.","datePublished":"2026-03-02T00:00:00.000Z","author":{"@type":"Person","name":"neocode24","url":"https://github.com/neocode24"},"publisher":{"@type":"Person","name":"neocode24"},"keywords":"kubernetes, networking, nftables, kube-proxy, ebpf"}</script> <div class="lg:grid lg:grid-cols-[1fr_14rem] lg:gap-8"> <div class="min-w-0"> <article> <header class="mb-8 border-b border-(--color-border) dark:border-(--color-dark-border) pb-6"> <h1 class="text-3xl font-bold mb-3">kube-proxy IPVS가 Deprecated된 진짜 이유 — nftables 전환 가이드</h1> <div class="flex items-center gap-3 text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> <time datetime="2026-03-02T00:00:00.000Z"> 2026년 3월 2일 </time>  <span>&middot; 8분 읽기</span> </div> <div class="flex flex-wrap gap-2 mt-3"> <span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> kubernetes </span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> networking </span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> nftables </span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> kube-proxy </span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> ebpf </span> </div> </header> <div class="prose dark:prose-invert">  <p>Kubernetes 1.35에서 kube-proxy IPVS 모드가 공식 deprecated되었다. “다음은 당연히 eBPF겠지”라고 생각했다면 틀렸다. 선택된 것은 <strong>nftables</strong>다.</p>
+<p>이 글에서는 왜 IPVS가 버려졌는지, 왜 eBPF가 아닌 nftables가 선택됐는지, 그리고 어떻게 마이그레이션하면 되는지를 정리한다.</p>
+<h2 id="kube-proxy-모드의-역사--20년간의-진화">kube-proxy 모드의 역사 — 20년간의 진화</h2>
+<p>Kubernetes의 Service 네트워킹은 리눅스 커널의 패킷 처리 기술과 함께 진화해왔다.</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>iptables (2001~, kernel 2.4)</span></span>
+<span class="line"><span>    ↓ 성능 문제 (linear O(n) rule 탐색)</span></span>
+<span class="line"><span>IPVS (2017~, k8s 1.9 alpha)</span></span>
+<span class="line"><span>    ↓ 유지보수 부담 + iptables 의존성 잔존</span></span>
+<span class="line"><span>nftables (2024~, k8s 1.29 alpha → 1.33 GA)</span></span></code></pre>
+<p><strong>iptables</strong>는 2001년부터 리눅스의 기본 패킷 필터링 도구였다. kube-proxy도 당연히 iptables를 사용했지만, Service 수가 늘어날수록 O(n) 선형 탐색이 병목이 됐다. 10,000개 Service가 있으면 매 패킷마다 10,000개 체인을 순차 탐색해야 했다.</p>
+<p><strong>IPVS</strong>는 이 문제를 풀기 위해 2017년(k8s 1.9) 도입됐다. hash table 기반 로드밸런싱으로 iptables보다 확실히 빨랐고, 대규모 클러스터에서 구원자처럼 보였다.</p>
+<p><strong>nftables</strong>는 2014년 커널 3.13에서 등장한 iptables의 공식 후속 기술이다. Kubernetes에는 1.29(2024)에서 alpha로 들어왔고, 1.33(2025)에서 GA가 됐다.</p>
+<h2 id="ipvs가-deprecated된-4가지-이유">IPVS가 Deprecated된 4가지 이유</h2>
+<h3 id="1-유지보수할-사람이-없다">1. 유지보수할 사람이 없다</h3>
+<p>SIG-Network는 세 개의 백엔드(iptables, IPVS, nftables)를 동시에 유지하고 있었다. 문제는 IPVS 코드베이스에 깊은 전문성을 가진 개발자가 거의 없다는 것이다. 버그는 쌓이고, 고칠 사람은 부족하고, 결국 “하나를 줄이자”는 결론에 이르렀다.</p>
+<h3 id="2-iptables-탈출-이라더니-여전히-iptables에-의존">2. “iptables 탈출” 이라더니, 여전히 iptables에 의존</h3>
+<p>IPVS 모드의 아이러니는, IPVS 커널 API만으로는 Kubernetes Service를 완전히 구현할 수 없다는 점이다. NodePort, ExternalIP, 패킷 필터링 등을 위해 IPVS 모드에서도 iptables API를 대량 사용한다.</p>
+<p>iptables에서 벗어나려면 어차피 이 부분을 nftables로 포팅해야 한다. 그 시점에서 IPVS 레이어의 존재 이유가 사라진다.</p>
+<h3 id="3-좁은-문제만-해결한다">3. 좁은 문제만 해결한다</h3>
+<p>IPVS는 “빠른 로드밸런싱”이라는 한 가지 문제에 특화되어 있다. 하지만 Kubernetes 네트워킹은 로드밸런싱, 패킷 필터링, NAT, 연결 추적을 모두 다뤄야 한다. nftables는 이 모든 것을 하나의 프레임워크에서 통합 처리한다.</p>
+<h3 id="4-커널에서도-더-이상-발전하지-않는다">4. 커널에서도 더 이상 발전하지 않는다</h3>
+<p>IPVS도 iptables처럼 커널 커뮤니티에서 활발한 개발이 이루어지지 않는다. 새로운 기능과 성능 개선은 nftables와 eBPF에 집중되고 있다. deprecated 기술 위에 인프라를 쌓는 것은 시한폭탄이다.</p>
+<h2 id="왜-ebpf가-아닌-nftables인가">왜 eBPF가 아닌 nftables인가?</h2>
+<p>이 부분이 가장 논쟁적이다. eBPF가 대세인데 왜 nftables를 선택했을까?</p>
+<p>KEP-3866 문서에 이런 문장이 있다:</p>
+<blockquote>
+<p><em>“eBPF is very trendy, but also notoriously difficult to work with.”</em></p>
+</blockquote>
+<h3 id="ebpf를-선택하지-않은-이유">eBPF를 선택하지 않은 이유</h3>
+<ol>
+<li>
+<p><strong>커널 호환성</strong>: eBPF에서 conntrack에 접근하는 API는 최신 커널에만 있다. NAT 연결을 위한 API는 kernel 6.1에서야 추가됐다. 대다수 Kubernetes 클러스터가 kernel 6.1 이상을 쓰기까지는 아직 시간이 필요하다.</p>
+</li>
+<li>
+<p><strong>복잡성</strong>: eBPF 기반 kube-proxy를 만들면 초기에 수많은 workaround가 필요하다. Cilium이 이 길을 먼저 걸었고, 그 복잡성을 누구보다 잘 안다.</p>
+</li>
+<li>
+<p><strong>범용성 부족</strong>: eBPF 솔루션은 Cilium, Calico 같은 특정 CNI에 묶인다. 업스트림 kube-proxy는 어떤 CNI와도 동작해야 하는데, eBPF로는 이 범용성을 보장하기 어렵다.</p>
+</li>
+</ol>
+<h3 id="nftables가-선택된-이유">nftables가 선택된 이유</h3>
+<ol>
+<li><strong>통합 인터페이스</strong>: 패킷 필터링 + NAT + 로드밸런싱을 하나의 프레임워크로</li>
+<li><strong>O(1) 해시맵 탐색</strong>: verdict map으로 단일 hash lookup — iptables의 O(n)과 차원이 다르다</li>
+<li><strong>Kubernetes와 궁합</strong>: 규칙을 선언적으로 관리하는 방식이 Kubernetes 모델과 자연스럽게 맞는다</li>
+<li><strong>낮은 커널 요구</strong>: kernel 5.13+면 충분 (eBPF NAT는 6.1+ 필요)</li>
+<li><strong>drop-in 교체</strong>: 기존 kube-proxy 구조를 유지하면서 모드만 바꾸면 된다</li>
+</ol>
+<h2 id="iptables-vs-nftables--구조적-차이">iptables vs nftables — 구조적 차이</h2>
+<p>차이를 직관적으로 보면 이렇다:</p>
+<h3 id="iptables-순차-탐색">iptables: 순차 탐색</h3>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>Service A → Chain KUBE-SVC-A → Rule 1 (endpoint 1)</span></span>
+<span class="line"><span>                              → Rule 2 (endpoint 2)</span></span>
+<span class="line"><span>                              → Rule 3 (endpoint 3)</span></span>
+<span class="line"><span>                              ... (10,000개 Service = 10,000개 체인)</span></span></code></pre>
+<p>매 패킷마다 규칙을 순차 탐색한다. Service가 많을수록 느려진다. <strong>O(n)</strong>.</p>
+<h3 id="nftables-해시-탐색">nftables: 해시 탐색</h3>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>단일 규칙 + verdict map (hash table)</span></span>
+<span class="line"><span>  {Service A IP:Port → endpoint set A}</span></span>
+<span class="line"><span>  {Service B IP:Port → endpoint set B}</span></span>
+<span class="line"><span>  ... (단일 hash lookup으로 처리)</span></span></code></pre>
+<p>Service가 10,000개든 100,000개든 단일 hash lookup이다. <strong>O(1)</strong>.</p>
+<h2 id="성능-비교">성능 비교</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>항목</th><th>iptables</th><th>IPVS</th><th>nftables</th><th>eBPF (Cilium)</th></tr></thead><tbody><tr><td><strong>룩업 방식</strong></td><td>선형 O(n)</td><td>해시 O(1)</td><td>해시 O(1)</td><td>해시 O(1)</td></tr><tr><td><strong>처리량</strong></td><td>낮음</td><td>높음</td><td>80-90 Gbps</td><td>100+ Gbps</td></tr><tr><td><strong>지연시간</strong></td><td>높음</td><td>중간</td><td>100-200 µs</td><td>&#x3C; 50 µs</td></tr><tr><td><strong>CPU 사용량</strong></td><td>높음</td><td>중간</td><td>중간</td><td>25-40% 낮음</td></tr><tr><td><strong>최소 커널</strong></td><td>2.4+</td><td>2.6+</td><td>5.13+</td><td>6.1+</td></tr><tr><td><strong>kube-proxy 필요</strong></td><td>Yes</td><td>Yes</td><td>Yes</td><td>No (대체)</td></tr><tr><td><strong>iptables 의존</strong></td><td>전적 의존</td><td>부분 의존</td><td>없음</td><td>없음</td></tr><tr><td><strong>상태</strong></td><td>기본값</td><td><strong>Deprecated</strong></td><td><strong>GA (권장)</strong></td><td>CNI 의존</td></tr></tbody></table>
+<p>nftables는 IPVS와 비슷한 성능을 내면서 iptables 의존을 완전히 끊었다. eBPF(Cilium)가 절대 성능에서는 앞서지만, CNI에 종속되고 커널 요구사항이 높다.</p>
+<h2 id="마이그레이션-가이드-ipvs--nftables">마이그레이션 가이드: IPVS → nftables</h2>
+<p>전환 자체는 간단하다.</p>
+<h3 id="step-1-커널-확인">Step 1. 커널 확인</h3>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6F42C1;--shiki-dark:#B392F0">uname</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> -r</span></span>
+<span class="line"><span style="color:#6A737D;--shiki-dark:#6A737D"># 5.13 이상 필요</span></span></code></pre>
+<h3 id="step-2-kube-proxy-설정-변경">Step 2. kube-proxy 설정 변경</h3>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#6A737D;--shiki-dark:#6A737D"># kube-proxy ConfigMap</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">apiVersion</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">kubeproxy.config.k8s.io/v1alpha1</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">kind</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">KubeProxyConfiguration</span></span>
+<span class="line"><span style="color:#22863A;--shiki-dark:#85E89D">mode</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">"nftables"</span><span style="color:#6A737D;--shiki-dark:#6A737D">  # 기존: "ipvs"</span></span></code></pre>
+<h3 id="step-3-kube-proxy-재시작">Step 3. kube-proxy 재시작</h3>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6F42C1;--shiki-dark:#B392F0">kubectl</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> rollout</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> restart</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> daemonset/kube-proxy</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> -n</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> kube-system</span></span></code></pre>
+<h3 id="step-4-cni-호환성-확인">Step 4. CNI 호환성 확인</h3>
+<p>Calico를 사용 중이라면 v3.30 이상이 필요하다. Cilium 사용자는 이미 kube-proxy를 우회하고 있을 가능성이 높다.</p>
+<h3 id="주의사항">주의사항</h3>
+<ul>
+<li><strong>NodePort 바인딩</strong>: nftables 모드는 기본적으로 노드의 기본 인터페이스에서만 NodePort를 수신한다. <code>127.0.0.1</code>에서는 수신하지 않으므로, 로컬 테스트 시 주의가 필요하다.</li>
+<li><strong>방화벽</strong>: nftables 모드는 자동으로 방화벽에 구멍을 뚫지 않는다. 노드 방화벽이 있다면 적절히 설정해야 한다.</li>
+<li><strong>conntrack workaround</strong>: 명시적으로 설정해야 적용된다.</li>
+</ul>
+<h2 id="그래서-ebpf는">그래서 eBPF는?</h2>
+<p>nftables는 <strong>업스트림 kube-proxy의 공식 방향</strong>이다. 하지만 eBPF는 별도의 길을 가고 있다. CNI 레벨에서 kube-proxy를 <strong>완전히 대체</strong>하는 경로다.</p>
+<ul>
+<li><strong>Cilium</strong>: eBPF 기반, kube-proxy 완전 대체, 100+ Gbps, DSR(Direct Server Return) 지원</li>
+<li><strong>Calico eBPF</strong>: kube-proxy 우회, 낮은 지연시간, 소스 IP 보존</li>
+</ul>
+<p><strong>선택 기준은 명확하다:</strong></p>
+<blockquote>
+<p>고성능이 필요한 대규모 클러스터에서는 eBPF(Cilium/Calico)를 선택하고,
+표준적이고 안정적인 운영이 목표라면 nftables를 선택하면 된다.</p>
+</blockquote>
+<p>대부분의 클러스터에서는 nftables로 충분하다. eBPF는 수천 개 노드, 수만 RPS 이상의 트래픽을 처리하는 환경에서 진가를 발휘한다.</p>
+<h2 id="타임라인">타임라인</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>버전</th><th>변경사항</th></tr></thead><tbody><tr><td>v1.29 (2024)</td><td>nftables 모드 Alpha 도입 (KEP-3866)</td></tr><tr><td>v1.31 (2025)</td><td>nftables 모드 Beta</td></tr><tr><td>v1.33 (2025)</td><td>nftables 모드 <strong>GA</strong></td></tr><tr><td>v1.35 (2026)</td><td>IPVS 모드 <strong>Deprecated</strong></td></tr><tr><td>v1.36 (2026 예정)</td><td>IPVS 모드 제거 예정</td></tr></tbody></table>
+<p>v1.36에서 IPVS가 완전히 제거될 예정이니, IPVS를 쓰고 있다면 지금이 전환할 때다. 급할 건 없지만, 미룰 이유도 없다.</p>  </div> </article> <section class="mt-12 pt-8 border-t border-(--color-border) dark:border-(--color-dark-border)"><h2 class="text-lg font-semibold mb-4">관련 글</h2><div class="grid grid-cols-1 sm:grid-cols-3 gap-4"><a href="/blog/kubernetes-1-35-new-features/" class="block rounded-lg bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) p-4 hover:bg-(--color-border) dark:hover:bg-(--color-dark-border) transition-colors"><h3 class="text-sm font-medium line-clamp-2 mb-2">Kubernetes 1.35 신규 기능 총정리</h3><div class="flex flex-wrap gap-1"><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">kubernetes</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">cloud-native</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">container</span></div></a><a href="/blog/ai-portal-cicd-pipeline/" class="block rounded-lg bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) p-4 hover:bg-(--color-border) dark:hover:bg-(--color-dark-border) transition-colors"><h3 class="text-sm font-medium line-clamp-2 mb-2">모노레포 CI/CD 실전 구성 — PR Preview부터 자동 정리까지</h3><div class="flex flex-wrap gap-1"><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">devops</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">cicd</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">kubernetes</span></div></a><a href="/blog/litellm-ai-gateway/" class="block rounded-lg bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) p-4 hover:bg-(--color-border) dark:hover:bg-(--color-dark-border) transition-colors"><h3 class="text-sm font-medium line-clamp-2 mb-2">LiteLLM으로 LLM API 통합하기 — 개인 인프라에서 엔터프라이즈까지</h3><div class="flex flex-wrap gap-1"><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">ai</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">llm</span><span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">gateway</span></div></a></div></section> <!-- giscus: GitHub Discussions 기반 댓글 --><section class="mt-12 pt-8 border-t border-(--color-border) dark:border-(--color-dark-border)"> <div id="giscus-container"></div> </section> <script>
+  function loadGiscus() {
+    const container = document.getElementById('giscus-container');
+    if (!container || container.querySelector('script')) return;
+
+    const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+    const script = document.createElement('script');
+    script.src = 'https://giscus.app/client.js';
+    script.setAttribute('data-repo', 'neocode24/portfolio');
+    script.setAttribute('data-repo-id', 'R_kgDOQPCcTQ');
+    script.setAttribute('data-category', 'Announcements');
+    script.setAttribute('data-category-id', 'DIC_kwDOQPCcTc4C3hLE');
+    script.setAttribute('data-mapping', 'pathname');
+    script.setAttribute('data-strict', '0');
+    script.setAttribute('data-reactions-enabled', '1');
+    script.setAttribute('data-emit-metadata', '0');
+    script.setAttribute('data-input-position', 'top');
+    script.setAttribute('data-theme', theme);
+    script.setAttribute('data-lang', 'ko');
+    script.crossOrigin = 'anonymous';
+    script.async = true;
+    container.appendChild(script);
+  }
+
+  loadGiscus();
+
+  // 테마 토글 시 giscus iframe에도 반영
+  const toggle = document.getElementById('theme-toggle');
+  if (toggle) {
+    toggle.addEventListener('click', () => {
+      const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      const iframe = document.querySelector('iframe.giscus-frame');
+      if (iframe) {
+        iframe.contentWindow.postMessage(
+          { giscus: { setConfig: { theme } } },
+          'https://giscus.app'
+        );
+      }
+    });
+  }
+</script> </div> <aside class="hidden lg:block"> <div class="sticky top-20 space-y-8"> <nav class="toc" aria-label="목차"><h2 class="text-sm font-semibold mb-3 text-(--color-text) dark:text-(--color-dark-text)">
+목차
+</h2><ul class="space-y-1.5 text-sm"><li><a href="#kube-proxy-모드의-역사--20년간의-진화" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="kube-proxy-모드의-역사--20년간의-진화">kube-proxy 모드의 역사 — 20년간의 진화</a></li><li><a href="#ipvs가-deprecated된-4가지-이유" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="ipvs가-deprecated된-4가지-이유">IPVS가 Deprecated된 4가지 이유</a></li><li class="pl-3"><a href="#1-유지보수할-사람이-없다" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="1-유지보수할-사람이-없다">1. 유지보수할 사람이 없다</a></li><li class="pl-3"><a href="#2-iptables-탈출-이라더니-여전히-iptables에-의존" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="2-iptables-탈출-이라더니-여전히-iptables에-의존">2. “iptables 탈출” 이라더니, 여전히 iptables에 의존</a></li><li class="pl-3"><a href="#3-좁은-문제만-해결한다" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="3-좁은-문제만-해결한다">3. 좁은 문제만 해결한다</a></li><li class="pl-3"><a href="#4-커널에서도-더-이상-발전하지-않는다" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="4-커널에서도-더-이상-발전하지-않는다">4. 커널에서도 더 이상 발전하지 않는다</a></li><li><a href="#왜-ebpf가-아닌-nftables인가" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="왜-ebpf가-아닌-nftables인가">왜 eBPF가 아닌 nftables인가?</a></li><li class="pl-3"><a href="#ebpf를-선택하지-않은-이유" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="ebpf를-선택하지-않은-이유">eBPF를 선택하지 않은 이유</a></li><li class="pl-3"><a href="#nftables가-선택된-이유" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="nftables가-선택된-이유">nftables가 선택된 이유</a></li><li><a href="#iptables-vs-nftables--구조적-차이" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="iptables-vs-nftables--구조적-차이">iptables vs nftables — 구조적 차이</a></li><li class="pl-3"><a href="#iptables-순차-탐색" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="iptables-순차-탐색">iptables: 순차 탐색</a></li><li class="pl-3"><a href="#nftables-해시-탐색" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="nftables-해시-탐색">nftables: 해시 탐색</a></li><li><a href="#성능-비교" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="성능-비교">성능 비교</a></li><li><a href="#마이그레이션-가이드-ipvs--nftables" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="마이그레이션-가이드-ipvs--nftables">마이그레이션 가이드: IPVS → nftables</a></li><li class="pl-3"><a href="#step-1-커널-확인" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="step-1-커널-확인">Step 1. 커널 확인</a></li><li class="pl-3"><a href="#step-2-kube-proxy-설정-변경" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="step-2-kube-proxy-설정-변경">Step 2. kube-proxy 설정 변경</a></li><li class="pl-3"><a href="#step-3-kube-proxy-재시작" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="step-3-kube-proxy-재시작">Step 3. kube-proxy 재시작</a></li><li class="pl-3"><a href="#step-4-cni-호환성-확인" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="step-4-cni-호환성-확인">Step 4. CNI 호환성 확인</a></li><li class="pl-3"><a href="#주의사항" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="주의사항">주의사항</a></li><li><a href="#그래서-ebpf는" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="그래서-ebpf는">그래서 eBPF는?</a></li><li><a href="#타임라인" class="toc-link block py-0.5 text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug" data-slug="타임라인">타임라인</a></li></ul></nav><script type="module">function o(){const n=document.querySelectorAll(".toc-link");if(n.length===0)return;const r=Array.from(n).map(e=>e.dataset.slug).map(e=>document.getElementById(e)).filter(Boolean);if(r.length===0)return;let s="";const a=new IntersectionObserver(e=>{for(const t of e)if(t.isIntersecting){s=t.target.id;break}n.forEach(t=>{t.classList.toggle("active",t.dataset.slug===s)})},{rootMargin:"-80px 0px -70% 0px",threshold:0});r.forEach(e=>a.observe(e))}o();document.addEventListener("astro:after-swap",o);</script> <section><h2 class="text-sm font-semibold mb-3 text-(--color-text) dark:text-(--color-dark-text)">
+최근 글
+</h2><ul class="space-y-2 text-sm"><li><a href="/blog/kubernetes-1-35-new-features" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">Kubernetes 1.35 신규 기능 총정리</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li><li><a href="/blog/ai-portal-cicd-pipeline" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">모노레포 CI/CD 실전 구성 — PR Preview부터 자동 정리까지</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li><li><a href="/blog/nanoclaw-architecture" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">Telegram 메시지 하나가 AI 에이전트가 되기까지 — NanoClaw 아키텍처 해부</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li><li><a href="/blog/litellm-ai-gateway" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">LiteLLM으로 LLM API 통합하기 — 개인 인프라에서 엔터프라이즈까지</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li><li><a href="/blog/portfolio-blog-architecture" class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"><span class="line-clamp-2">Obsidian Vault에서 GitHub Pages까지 — 기술 블로그 자동 발행 파이프라인</span><time class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70" datetime="2026-03-02T00:00:00.000Z">3월 2일</time></a></li></ul></section> <section><h2 class="text-sm font-semibold mb-3 text-(--color-text) dark:text-(--color-dark-text)">
+태그
+</h2><div class="flex flex-wrap gap-1.5"><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="7개 글">kubernetes</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="7개 글">devops</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="4개 글">ai</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">container</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">claude</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">architecture</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">telegram</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="2개 글">cloudflare</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">cloud-native</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">cicd</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">gitops</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">github-actions</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">docker</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">llm</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">gateway</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">openai</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">networking</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">nftables</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">kube-proxy</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">ebpf</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">blog</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">astro</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">github-pages</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">automation</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">pod</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">resource-management</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">oci</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">volume</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">litellm</span><span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default" title="1개 글">infrastructure</span></div></section> </div> </aside> </div> <script type="module">function o(){document.querySelectorAll(".prose pre[data-language]").forEach(e=>{if(e.querySelector(".code-header"))return;const c=e.getAttribute("data-language")||"",t=document.createElement("div");t.className="code-header",t.innerHTML=`<span class="code-lang">${c}</span><span class="code-copy" role="button" aria-label="코드 복사">복사</span>`,e.insertBefore(t,e.firstChild),t.querySelector(".code-copy").addEventListener("click",async()=>{const n=e.querySelector("code");if(!n)return;const r=n.innerText.replace(/^\d+\n?/gm,"");await navigator.clipboard.writeText(r);const a=t.querySelector(".code-copy");a.textContent="완료",setTimeout(()=>{a.textContent="복사"},1500)})})}o();document.addEventListener("astro:after-swap",o);</script> <script type="module" src="/_astro/BlogPost.astro_astro_type_script_index_1_lang.DzPawRLx.js"></script>  </main> <footer class="w-full border-t border-(--color-border) dark:border-(--color-dark-border) transition-colors duration-200"> <div class="max-w-3xl mx-auto px-4 py-6 flex items-center justify-between text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)"> <span>&copy; 2026 neocode24</span> <a href="https://github.com/neocode24" target="_blank" rel="noopener noreferrer" class="hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors" aria-label="GitHub"> <!-- Lucide: Github --> <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"> <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path> <path d="M9 18c-4.51 2-5-2-7-2"></path> </svg> </a> </div> </footer> </body></html>
