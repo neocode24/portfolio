@@ -68,18 +68,20 @@ html.dark {
   background-color: var(--color-dark-code-bg);
 }
 
+/* Shiki 듀얼 테마: dark 클래스에서 다크 색상 활성화 */
+.dark .astro-code,
+.dark .astro-code span {
+  color: var(--shiki-dark) !important;
+  background-color: var(--shiki-dark-bg) !important;
+}
+
 /* 코드 블록 */
 .prose pre {
   position: relative;
-  background-color: var(--color-code-bg);
   padding: 1rem;
   border-radius: 0.5rem;
   overflow-x: auto;
   counter-reset: line;
-}
-
-.dark .prose pre {
-  background-color: var(--color-dark-code-bg);
 }
 
 .prose pre code {
@@ -87,21 +89,35 @@ html.dark {
   padding: 0;
 }
 
-/* 언어 라벨 */
-.prose pre[data-language]::before {
-  content: attr(data-language);
-  position: absolute;
-  top: 0;
-  right: 0;
-  padding: 0.15rem 0.5rem;
+/* 코드 블록 헤더 (언어 라벨 + 복사 버튼) */
+.code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.25rem 0.5rem;
   font-size: 0.7rem;
-  text-transform: uppercase;
-  color: var(--color-text-secondary);
-  opacity: 0.7;
+  color: var(--color-text);
+  opacity: 0.6;
+  user-select: none;
 }
 
-.dark .prose pre[data-language]::before {
-  color: var(--color-dark-text-secondary);
+.dark .code-header {
+  color: var(--color-dark-text);
+}
+
+.code-header .code-lang {
+  text-transform: uppercase;
+}
+
+.code-header .code-copy {
+  cursor: pointer;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.25rem;
+  transition: opacity 0.15s;
+}
+
+.code-header .code-copy:hover {
+  opacity: 1;
 }
 
 /* 줄 번호 */

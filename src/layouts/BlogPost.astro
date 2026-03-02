@@ -121,4 +121,30 @@ function formatDate(date: Date): string {
     initMermaid();
     document.addEventListener('astro:after-swap', initMermaid);
   </script>
+
+  <script>
+    function initCodeHeaders() {
+      document.querySelectorAll('.prose pre[data-language]').forEach((pre) => {
+        if (pre.querySelector('.code-header')) return;
+        const lang = pre.getAttribute('data-language') || '';
+        const header = document.createElement('div');
+        header.className = 'code-header';
+        header.innerHTML = `<span class="code-lang">${lang}</span><span class="code-copy" role="button" aria-label="코드 복사">복사</span>`;
+        pre.insertBefore(header, pre.firstChild);
+
+        header.querySelector('.code-copy')!.addEventListener('click', async () => {
+          const code = pre.querySelector('code');
+          if (!code) return;
+          const text = code.innerText.replace(/^\d+\n?/gm, '');
+          await navigator.clipboard.writeText(text);
+          const btn = header.querySelector('.code-copy')!;
+          btn.textContent = '완료';
+          setTimeout(() => { btn.textContent = '복사'; }, 1500);
+        });
+      });
+    }
+
+    initCodeHeaders();
+    document.addEventListener('astro:after-swap', initCodeHeaders);
+  </script>
 </BaseLayout>
