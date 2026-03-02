@@ -13,9 +13,9 @@ ingress:
   - hostname: llm.neocode24.com
     service: http://localhost:30400
 
-  # Portfolio Blog (K8s NodePort)
-  - hostname: blog.neocode24.com
-    service: http://localhost:30800
+  # Portfolio Blog → GitHub Pages 전환 (Cloudflare DNS CNAME 사용)
+  # - hostname: blog.neocode24.com
+  #   service: http://localhost:30800
 
   # Catch-all
   - service: http_status:404
