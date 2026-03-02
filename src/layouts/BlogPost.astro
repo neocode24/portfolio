@@ -33,6 +33,26 @@ function formatDate(date: Date): string {
 ---
 
 <BaseLayout title={`${title} | neocode24`} description={description} wide>
+  <!-- JSON-LD 구조화 데이터 -->
+  <script type="application/ld+json" set:html={JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": title,
+    "description": description,
+    "datePublished": pubDate.toISOString(),
+    ...(updatedDate && { "dateModified": updatedDate.toISOString() }),
+    "author": {
+      "@type": "Person",
+      "name": "neocode24",
+      "url": "https://github.com/neocode24"
+    },
+    "publisher": {
+      "@type": "Person",
+      "name": "neocode24"
+    },
+    ...(tags.length > 0 && { "keywords": tags.join(", ") })
+  })} />
+
   <div class="lg:grid lg:grid-cols-[1fr_14rem] lg:gap-8">
     <div class="min-w-0">
       <article>
