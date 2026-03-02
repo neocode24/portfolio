@@ -137,6 +137,47 @@ html.dark {
   border-color: var(--color-dark-border);
 }
 
+/* 테이블 */
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1.5em;
+  font-size: 0.875em;
+}
+
+.prose thead {
+  border-bottom: 2px solid var(--color-border);
+}
+
+.dark .prose thead {
+  border-color: var(--color-dark-border);
+}
+
+.prose th {
+  font-weight: 600;
+  text-align: left;
+  padding: 0.5em 0.75em;
+}
+
+.prose td {
+  padding: 0.5em 0.75em;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dark .prose td {
+  border-color: var(--color-dark-border);
+}
+
+.prose tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* 테이블 반응형 */
+.prose table {
+  display: block;
+  overflow-x: auto;
+}
+
 /* TOC 활성 항목 */
 .toc-link.active {
   color: var(--color-accent);
