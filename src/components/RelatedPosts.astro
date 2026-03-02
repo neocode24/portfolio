@@ -1,0 +1,46 @@
+---
+import { getCollection } from 'astro:content';
+
+interface Props {
+  currentSlug: string;
+  currentTags: string[];
+}
+
+const { currentSlug, currentTags } = Astro.props;
+
+const posts = (await getCollection('blog'))
+  .filter((post) => !post.data.draft && post.id !== currentSlug);
+
+// 태그 겹침 수로 관련도 계산
+const scored = posts
+  .map((post) => {
+    const overlap = (post.data.tags ?? []).filter((t) => currentTags.includes(t)).length;
+    return { post, score: overlap };
+  })
+  .filter(({ score }) => score > 0)
+  .sort((a, b) => b.score - a.score || b.post.data.pubDate.valueOf() - a.post.data.pubDate.valueOf())
+  .slice(0, 3);
+---
+
+{scored.length > 0 && (
+  <section class="mt-12 pt-8 border-t border-(--color-border) dark:border-(--color-dark-border)">
+    <h2 class="text-lg font-semibold mb-4">관련 글</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {scored.map(({ post }) => (
+        <a
+          href={`/blog/${post.id}/`}
+          class="block rounded-lg bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) p-4 hover:bg-(--color-border) dark:hover:bg-(--color-dark-border) transition-colors"
+        >
+          <h3 class="text-sm font-medium line-clamp-2 mb-2">{post.data.title}</h3>
+          <div class="flex flex-wrap gap-1">
+            {(post.data.tags ?? []).slice(0, 3).map((tag) => (
+              <span class="text-xs px-1.5 py-0.5 rounded-full bg-(--color-bg) dark:bg-(--color-dark-bg) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">
+                {tag}
+              </span>
+            ))}
+          </div>
+        </a>
+      ))}
+    </div>
+  </section>
+)}

@@ -4,6 +4,7 @@ import Giscus from '../components/Giscus.astro';
 import TableOfContents from '../components/TableOfContents.astro';
 import RecentPosts from '../components/RecentPosts.astro';
 import TagCloud from '../components/TagCloud.astro';
+import RelatedPosts from '../components/RelatedPosts.astro';
 
 interface Heading {
   depth: number;
@@ -86,6 +87,7 @@ function formatDate(date: Date): string {
           <slot />
         </div>
       </article>
+      <RelatedPosts currentSlug={currentSlug!} currentTags={tags} />
       <Giscus />
     </div>
 
