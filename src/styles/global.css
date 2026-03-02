@@ -146,3 +146,9 @@ html.dark {
 .dark .toc-link.active {
   color: var(--color-dark-accent);
 }
+
+/* Mermaid 다이어그램 */
+.prose .mermaid {
+  margin: 1.5em 0;
+  overflow-x: auto;
+}
