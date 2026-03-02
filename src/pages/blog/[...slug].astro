@@ -12,6 +12,11 @@ export async function getStaticPaths() {
 
 const { post } = Astro.props;
 const { Content, headings } = await render(post);
+
+// 읽기 소요시간 계산 (한글 기준 분당 500자)
+const text = post.body ?? '';
+const charCount = text.replace(/\s/g, '').length;
+const readingTime = Math.max(1, Math.round(charCount / 500));
 ---
 
 <BlogPost
@@ -22,6 +27,7 @@ const { Content, headings } = await render(post);
   tags={post.data.tags}
   headings={headings}
   currentSlug={post.id}
+  readingTime={readingTime}
 >
   <Content />
 </BlogPost>

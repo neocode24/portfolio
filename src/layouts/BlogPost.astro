@@ -19,9 +19,10 @@ interface Props {
   tags?: string[];
   headings?: Heading[];
   currentSlug?: string;
+  readingTime?: number;
 }
 
-const { title, description, pubDate, updatedDate, tags = [], headings = [], currentSlug } = Astro.props;
+const { title, description, pubDate, updatedDate, tags = [], headings = [], currentSlug, readingTime } = Astro.props;
 
 function formatDate(date: Date): string {
   return date.toLocaleDateString('ko-KR', {
@@ -66,6 +67,9 @@ function formatDate(date: Date): string {
               <span>
                 (수정: {formatDate(updatedDate)})
               </span>
+            )}
+            {readingTime && (
+              <span>&middot; {readingTime}분 읽기</span>
             )}
           </div>
           {tags.length > 0 && (
