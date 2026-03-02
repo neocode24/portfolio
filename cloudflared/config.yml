@@ -1,0 +1,21 @@
+# 참조용: 실제 파일은 ~/.cloudflared/config.yml
+# blog.neocode24.com 추가 후의 전체 ingress 설정
+
+tunnel: 64a975cc-0fca-45b8-91c2-f4f739561add
+credentials-file: /Users/neocode24/.cloudflared/64a975cc-0fca-45b8-91c2-f4f739561add.json
+
+ingress:
+  # NanoClaw Telegram webhook
+  - hostname: claw.neocode24.com
+    service: http://localhost:3030
+
+  # LiteLLM Gateway (K8s NodePort)
+  - hostname: llm.neocode24.com
+    service: http://localhost:30400
+
+  # Portfolio Blog (K8s NodePort)
+  - hostname: blog.neocode24.com
+    service: http://localhost:30800
+
+  # Catch-all
+  - service: http_status:404

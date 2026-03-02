@@ -1,0 +1,40 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PostCard from '../components/PostCard.astro';
+
+const posts = (await getCollection('blog'))
+  .filter((post) => !post.data.draft)
+  .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf())
+  .slice(0, 5);
+---
+
+<BaseLayout title="neocode24 | 기술 블로그">
+  <section class="mb-12">
+    <h1 class="text-3xl font-bold mb-2">neocode24</h1>
+    <p class="text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">
+      Kubernetes, DevOps, AI 인프라에 대한 기술 블로그입니다.
+    </p>
+  </section>
+
+  <section>
+    <h2 class="text-xl font-semibold mb-4">최근 글</h2>
+    {posts.length > 0 ? (
+      <div class="space-y-1">
+        {posts.map((post) => (
+          <PostCard
+            title={post.data.title}
+            description={post.data.description}
+            pubDate={post.data.pubDate}
+            slug={post.id}
+            tags={post.data.tags}
+          />
+        ))}
+      </div>
+    ) : (
+      <p class="text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">
+        아직 작성된 글이 없습니다.
+      </p>
+    )}
+  </section>
+</BaseLayout>

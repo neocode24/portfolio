@@ -1,0 +1,27 @@
+---
+import ThemeToggle from './ThemeToggle.astro';
+
+const navItems = [
+  { label: 'Blog', href: '/blog' },
+  { label: 'About', href: '/about' },
+];
+---
+
+<header class="w-full border-b border-(--color-border) dark:border-(--color-dark-border) bg-(--color-bg) dark:bg-(--color-dark-bg) transition-colors duration-200">
+  <nav class="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
+    <a href="/" class="text-lg font-bold text-(--color-text) dark:text-(--color-dark-text) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors">
+      neocode24
+    </a>
+    <div class="flex items-center gap-4">
+      {navItems.map((item) => (
+        <a
+          href={item.href}
+          class="text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors"
+        >
+          {item.label}
+        </a>
+      ))}
+      <ThemeToggle />
+    </div>
+  </nav>
+</header>

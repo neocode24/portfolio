@@ -1,0 +1,42 @@
+---
+interface Props {
+  title: string;
+  description: string;
+  pubDate: Date;
+  slug: string;
+  tags?: string[];
+}
+
+const { title, description, pubDate, slug, tags = [] } = Astro.props;
+
+function formatDate(date: Date): string {
+  return date.toLocaleDateString('ko-KR', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+---
+
+<a href={`/blog/${slug}`} class="group block p-4 -mx-4 rounded-lg hover:bg-(--color-bg-secondary) dark:hover:bg-(--color-dark-bg-secondary) transition-colors">
+  <article>
+    <h3 class="text-lg font-semibold group-hover:text-(--color-accent) dark:group-hover:text-(--color-dark-accent) transition-colors">
+      {title}
+    </h3>
+    <time class="text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)" datetime={pubDate.toISOString()}>
+      {formatDate(pubDate)}
+    </time>
+    <p class="mt-1 text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) line-clamp-2">
+      {description}
+    </p>
+    {tags.length > 0 && (
+      <div class="flex flex-wrap gap-1.5 mt-2">
+        {tags.map((tag) => (
+          <span class="text-xs px-1.5 py-0.5 rounded bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">
+            {tag}
+          </span>
+        ))}
+      </div>
+    )}
+  </article>
+</a>
