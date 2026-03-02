@@ -1,6 +1,15 @@
 ---
 import BaseLayout from './BaseLayout.astro';
 import Giscus from '../components/Giscus.astro';
+import TableOfContents from '../components/TableOfContents.astro';
+import RecentPosts from '../components/RecentPosts.astro';
+import TagCloud from '../components/TagCloud.astro';
+
+interface Heading {
+  depth: number;
+  slug: string;
+  text: string;
+}
 
 interface Props {
   title: string;
@@ -8,9 +17,11 @@ interface Props {
   pubDate: Date;
   updatedDate?: Date;
   tags?: string[];
+  headings?: Heading[];
+  currentSlug?: string;
 }
 
-const { title, description, pubDate, updatedDate, tags = [] } = Astro.props;
+const { title, description, pubDate, updatedDate, tags = [], headings = [], currentSlug } = Astro.props;
 
 function formatDate(date: Date): string {
   return date.toLocaleDateString('ko-KR', {
@@ -21,33 +32,45 @@ function formatDate(date: Date): string {
 }
 ---
 
-<BaseLayout title={`${title} | neocode24`} description={description}>
-  <article>
-    <header class="mb-8 border-b border-(--color-border) dark:border-(--color-dark-border) pb-6">
-      <h1 class="text-3xl font-bold mb-3">{title}</h1>
-      <div class="flex items-center gap-3 text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">
-        <time datetime={pubDate.toISOString()}>
-          {formatDate(pubDate)}
-        </time>
-        {updatedDate && (
-          <span>
-            (수정: {formatDate(updatedDate)})
-          </span>
-        )}
-      </div>
-      {tags.length > 0 && (
-        <div class="flex flex-wrap gap-2 mt-3">
-          {tags.map((tag) => (
-            <span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">
-              {tag}
-            </span>
-          ))}
+<BaseLayout title={`${title} | neocode24`} description={description} wide>
+  <div class="lg:grid lg:grid-cols-[1fr_14rem] lg:gap-8">
+    <div class="min-w-0">
+      <article>
+        <header class="mb-8 border-b border-(--color-border) dark:border-(--color-dark-border) pb-6">
+          <h1 class="text-3xl font-bold mb-3">{title}</h1>
+          <div class="flex items-center gap-3 text-sm text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">
+            <time datetime={pubDate.toISOString()}>
+              {formatDate(pubDate)}
+            </time>
+            {updatedDate && (
+              <span>
+                (수정: {formatDate(updatedDate)})
+              </span>
+            )}
+          </div>
+          {tags.length > 0 && (
+            <div class="flex flex-wrap gap-2 mt-3">
+              {tags.map((tag) => (
+                <span class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary)">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+        </header>
+        <div class="prose">
+          <slot />
         </div>
-      )}
-    </header>
-    <div class="prose">
-      <slot />
+      </article>
+      <Giscus />
     </div>
-  </article>
-  <Giscus />
+
+    <aside class="hidden lg:block">
+      <div class="sticky top-20 space-y-8">
+        <TableOfContents headings={headings} />
+        <RecentPosts currentSlug={currentSlug} />
+        <TagCloud />
+      </div>
+    </aside>
+  </div>
 </BaseLayout>

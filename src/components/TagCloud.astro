@@ -1,0 +1,32 @@
+---
+import { getCollection } from 'astro:content';
+
+const posts = (await getCollection('blog')).filter((post) => !post.data.draft);
+
+const tagCounts = new Map<string, number>();
+for (const post of posts) {
+  for (const tag of post.data.tags ?? []) {
+    tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+  }
+}
+
+const sortedTags = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]);
+---
+
+{sortedTags.length > 0 && (
+  <section>
+    <h2 class="text-sm font-semibold mb-3 text-(--color-text) dark:text-(--color-dark-text)">
+      태그
+    </h2>
+    <div class="flex flex-wrap gap-1.5">
+      {sortedTags.map(([tag, count]) => (
+        <span
+          class="text-xs px-2 py-0.5 rounded-full bg-(--color-bg-secondary) dark:bg-(--color-dark-bg-secondary) text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors cursor-default"
+          title={`${count}개 글`}
+        >
+          {tag}
+        </span>
+      ))}
+    </div>
+  </section>
+)}

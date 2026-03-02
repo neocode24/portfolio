@@ -1,0 +1,47 @@
+---
+import { getCollection } from 'astro:content';
+
+interface Props {
+  currentSlug?: string;
+}
+
+const { currentSlug } = Astro.props;
+
+const posts = (await getCollection('blog'))
+  .filter((post) => !post.data.draft && post.id !== currentSlug)
+  .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf())
+  .slice(0, 5);
+
+function formatDate(date: Date): string {
+  return date.toLocaleDateString('ko-KR', {
+    month: 'short',
+    day: 'numeric',
+  });
+}
+---
+
+{posts.length > 0 && (
+  <section>
+    <h2 class="text-sm font-semibold mb-3 text-(--color-text) dark:text-(--color-dark-text)">
+      최근 글
+    </h2>
+    <ul class="space-y-2 text-sm">
+      {posts.map((post) => (
+        <li>
+          <a
+            href={`/blog/${post.id}`}
+            class="block text-(--color-text-secondary) dark:text-(--color-dark-text-secondary) hover:text-(--color-accent) dark:hover:text-(--color-dark-accent) transition-colors leading-snug"
+          >
+            <span class="line-clamp-2">{post.data.title}</span>
+            <time
+              class="text-xs text-(--color-text-secondary)/70 dark:text-(--color-dark-text-secondary)/70"
+              datetime={post.data.pubDate.toISOString()}
+            >
+              {formatDate(post.data.pubDate)}
+            </time>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </section>
+)}

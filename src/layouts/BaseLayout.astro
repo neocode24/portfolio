@@ -6,9 +6,10 @@ import Footer from '../components/Footer.astro';
 interface Props {
   title: string;
   description?: string;
+  wide?: boolean;
 }
 
-const { title, description = 'neocode24 기술 블로그' } = Astro.props;
+const { title, description = 'neocode24 기술 블로그', wide = false } = Astro.props;
 ---
 
 <!doctype html>
@@ -27,7 +28,7 @@ const { title, description = 'neocode24 기술 블로그' } = Astro.props;
   </head>
   <body class="min-h-screen flex flex-col bg-(--color-bg) text-(--color-text) dark:bg-(--color-dark-bg) dark:text-(--color-dark-text) transition-colors duration-200">
     <Header />
-    <main class="flex-1 w-full max-w-3xl mx-auto px-4 py-8">
+    <main class:list={["flex-1 w-full mx-auto px-4 py-8", wide ? "max-w-6xl" : "max-w-3xl"]}>
       <slot />
     </main>
     <Footer />

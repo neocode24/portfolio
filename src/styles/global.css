@@ -136,3 +136,13 @@ html.dark {
 .dark .prose hr {
   border-color: var(--color-dark-border);
 }
+
+/* TOC 활성 항목 */
+.toc-link.active {
+  color: var(--color-accent);
+  font-weight: 500;
+}
+
+.dark .toc-link.active {
+  color: var(--color-dark-accent);
+}
