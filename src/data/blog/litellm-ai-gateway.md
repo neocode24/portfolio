@@ -6,6 +6,12 @@ tags: ["ai", "llm", "gateway", "openai", "devops", "kubernetes"]
 vaultSource: "2026.02/LiteLLM AI Gateway.md"
 ---
 
+> 프로젝트: BerriAI/litellm
+> 최신 버전: v1.80.15-stable (2026년 1월)
+> 라이센스: Open Core 모델
+
+LiteLLM은 100개 이상의 LLM API를 OpenAI 형식으로 호출할 수 있는 오픈소스 AI Gateway이다.
+
 LLM을 하나만 쓸 때는 간단하다. OpenAI API 키를 발급받고 `openai.chat.completions.create()`를 호출하면 끝이다.
 
 문제는 두 번째 LLM을 추가할 때 시작된다. Claude를 쓰려면 Anthropic SDK를, Gemini를 쓰려면 Google SDK를 각각 설치해야 한다. 요청 형식이 다르고, 응답 구조가 다르고, 에러 코드가 다르다. 모델을 바꿀 때마다 코드를 고쳐야 한다.
